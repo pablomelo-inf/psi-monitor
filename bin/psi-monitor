@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Thin wrapper so the project's make targets can be run from anywhere:
+#   psi-monitor <target>     e.g.  psi-monitor status | logs | enable
+set -euo pipefail
+
+# Resolve symlinks (this file is linked into ~/.local/bin by `make link`).
+src="${BASH_SOURCE[0]}"
+while [[ -L "$src" ]]; do
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+done
+root="$(cd -P "$(dirname "$src")/.." && pwd)"
+
+[[ $# -eq 0 ]] && set -- help
+exec make --no-print-directory -C "$root" "$@"

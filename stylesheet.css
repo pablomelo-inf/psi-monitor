@@ -1,0 +1,37 @@
+.psi-box {
+    spacing: 4px;
+    padding: 0 2px;
+}
+
+.psi-pill {
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 90%;
+    color: #ffffff;
+    background-color: #5e5c64;
+}
+
+.psi-ok {
+    background-color: #26a269;
+}
+
+.psi-warn {
+    background-color: #e5a50a;
+    color: #1e1e1e;
+}
+
+.psi-crit {
+    background-color: #c01c28;
+}
+
+/* GPU shows usage, not pressure: high is not "bad", so it stays a fixed blue. */
+.psi-gpu {
+    background-color: #1c71d8;
+    color: #ffffff;
+}
+
+.psi-header {
+    font-size: 90%;
+    font-weight: bold;
+}

@@ -1,0 +1,7 @@
+{
+  "uuid": "__UUID__",
+  "name": "PSI Monitor",
+  "description": "CPU, memory, disk and GPU in the top bar, colored by kernel pressure (PSI).",
+  "shell-version": ["46"],
+  "version-name": "0.1.0"
+}

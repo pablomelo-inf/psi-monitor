@@ -1,0 +1,7 @@
+dist/
+node_modules/
+*.zip
+
+# Personal settings and generated files
+config.mk
+metadata.json
