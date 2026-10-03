@@ -52,10 +52,43 @@ jobs:
       - name: Install Prettier and ESLint
         run: npm ci
       - name: Install pre-commit
+        id: pre-commit
         run: |
           python3 -m venv "${RUNNER_TEMP}/pre-commit"
           "${RUNNER_TEMP}/pre-commit/bin/pip" install --quiet pre-commit==4.6.2
           echo "${RUNNER_TEMP}/pre-commit/bin" >> "${GITHUB_PATH}"
+          echo "python=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')" >> "${GITHUB_OUTPUT}"
+
+      # The hook environments (including the ShellCheck binary that its package
+      # downloads while installing) are cached, so most runs download nothing.
+      # The key changes with the hook config and the Python version.
+      - name: Restore the pre-commit hook environments
+        id: hooks-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-py${{ steps.pre-commit.outputs.python }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # Installing needs the network, and the host that serves ShellCheck
+      # sometimes answers 5xx. Retry only this step: retrying the hooks
+      # themselves would hide real lint failures.
+      - name: Install the hook environments
+        run: |
+          for attempt in 1 2 3; do
+            pre-commit install-hooks && exit 0
+            echo "Attempt ${attempt} failed" >&2
+            sleep $((attempt * 15))
+          done
+          exit 1
+
+      # Saved right after installing, so the cache is kept even if a hook fails.
+      - name: Save the pre-commit hook environments
+        if: steps.hooks-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: ${{ steps.hooks-cache.outputs.cache-primary-key }}
+
       - name: Run every hook on every file
         run: pre-commit run --all-files --show-diff-on-failure
 
@@ -87,7 +120,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # the only write access: create the tag and publish the release
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
