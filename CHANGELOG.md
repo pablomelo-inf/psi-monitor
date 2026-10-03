@@ -20,7 +20,8 @@ copied into the `.deb` changelog, which lintian wants under 80.
   just that list. The choice is stored in GSettings, in the new
   `org.gnome.shell.extensions.psi-monitor` schema (key `hidden-badges`). At
   least one of Disk, CPU and Memory always stays visible, so the options can
-  always be reached.
+  always be reached. "Select all" at the end of the list shows every badge
+  again.
 - `nvidia-smi` only runs while the GPU badge is shown.
 
 ### Changed

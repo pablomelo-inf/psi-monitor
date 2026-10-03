@@ -88,7 +88,7 @@ class GpuMonitor {
 // "Show in top bar" options; the same options end the normal menu.
 const Badge = GObject.registerClass(
     class Badge extends PanelMenu.Button {
-        _init(title, extraClass, onToggle) {
+        _init(title, extraClass, onToggle, onSelectAll) {
             super._init(0.0, title, false);
             this.add_style_class_name('psi-button');
 
@@ -107,8 +107,9 @@ const Badge = GObject.registerClass(
             this.menu.addMenuItem(this._bodyItem);
 
             this._toggles = []; // { key, item } of both menus
+            this._selectAllItems = [];
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-            this._addToggles(this.menu, onToggle);
+            this._addToggles(this.menu, onToggle, onSelectAll);
 
             // Registered with the panel's menu manager so only one menu is open.
             this._optionsMenu = new PopupMenu.PopupMenu(this, 0.0, St.Side.TOP);
@@ -116,10 +117,10 @@ const Badge = GObject.registerClass(
             Main.uiGroup.add_child(this._optionsMenu.actor);
             this._optionsMenu.actor.hide();
             Main.panel.menuManager.addMenu(this._optionsMenu);
-            this._addToggles(this._optionsMenu, onToggle);
+            this._addToggles(this._optionsMenu, onToggle, onSelectAll);
         }
 
-        _addToggles(menu, onToggle) {
+        _addToggles(menu, onToggle, onSelectAll) {
             const header = new PopupMenu.PopupMenuItem('Show in top bar', { reactive: false });
             header.label.add_style_class_name('psi-header');
             menu.addMenuItem(header);
@@ -130,6 +131,12 @@ const Badge = GObject.registerClass(
                 menu.addMenuItem(item);
                 this._toggles.push({ key, item });
             }
+
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            const selectAll = new PopupMenu.PopupMenuItem('Select all');
+            selectAll.connect('activate', () => onSelectAll());
+            menu.addMenuItem(selectAll);
+            this._selectAllItems.push(selectAll);
         }
 
         // Check marks for both menus, and the rule that the last always
@@ -140,6 +147,7 @@ const Badge = GObject.registerClass(
                 item.setOrnament(shown ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
                 item.setSensitive(shown ? canHide(hidden, key) : true);
             }
+            for (const item of this._selectAllItems) item.setSensitive(hidden.length > 0);
         }
 
         // `state` is one of STATES (the badge color), or null for none.
@@ -272,8 +280,11 @@ export default class PsiMonitorExtension extends Extension {
 
         this._badges = {};
         BADGES.forEach(([key, title], index) => {
-            const badge = new Badge(title, key === 'gpu' ? 'psi-gpu' : null, (k) =>
-                this._toggle(k),
+            const badge = new Badge(
+                title,
+                key === 'gpu' ? 'psi-gpu' : null,
+                (k) => this._toggle(k),
+                () => this._selectAll(),
             );
             // One role per badge. The explicit index keeps them in this order,
             // left to right, ahead of the other items on the right side.
@@ -322,6 +333,10 @@ export default class PsiMonitorExtension extends Extension {
         const unchanged =
             next.length === this._hidden.length && next.every((k) => this._hidden.includes(k));
         if (!unchanged) this._settings.set_strv('hidden-badges', next);
+    }
+
+    _selectAll() {
+        if (this._hidden.length > 0) this._settings.set_strv('hidden-badges', []);
     }
 
     _applyHidden() {
