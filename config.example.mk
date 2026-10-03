@@ -5,3 +5,7 @@
 # Changing it later changes the extension's identity, so pick it before you
 # release (anyone who installed the old UUID would have to reinstall).
 HANDLE := your-github-username
+
+# Optional: "Maintainer" field of the .deb. It is public inside the package, so
+# it defaults to GitHub's noreply address for HANDLE. Uncomment to override.
+# DEB_MAINTAINER := Your Name <12345678+your-github-username@users.noreply.github.com>

@@ -1,8 +1,8 @@
 # PSI Monitor
 
 A GNOME Shell extension that puts **disk, CPU, memory and GPU** in the top bar
-as four colored badges. The number says *how much* is in use. The color says
-whether the system is actually *struggling* because of it, using the Linux
+as four colored badges. The number says _how much_ is in use. The color says
+whether the system is actually _struggling_ because of it, using the Linux
 kernel's Pressure Stall Information (PSI).
 
 ![The four badges in the GNOME top bar](docs/screenshot.png)
@@ -31,6 +31,7 @@ The badges appear on the right side of the top bar. Details in
 - [Features](#features)
 - [Reading the badges](#reading-the-badges)
 - [Requirements](#requirements)
+- [Compatibility](#compatibility)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
@@ -70,15 +71,15 @@ This extension shows both: usage as the number, PSI as the color.
 The **number** is usage. The **color** is pressure: `some avg10`, the share of
 the last 10 s in which at least one task was stalled.
 
-| Badge   | Number                       | Color comes from                |
-|---------|------------------------------|---------------------------------|
-| Disk    | busy % of the busiest disk   | `/proc/pressure/io` (all disks) |
-| CPU     | usage % across all cores     | `/proc/pressure/cpu`            |
-| Memory  | RAM in use %                 | `/proc/pressure/memory`         |
-| GPU     | GPU usage % (`nvidia-smi`)   | fixed blue (usage only)         |
+| Badge  | Number                     | Color comes from                |
+| ------ | -------------------------- | ------------------------------- |
+| Disk   | busy % of the busiest disk | `/proc/pressure/io` (all disks) |
+| CPU    | usage % across all cores   | `/proc/pressure/cpu`            |
+| Memory | RAM in use %               | `/proc/pressure/memory`         |
+| GPU    | GPU usage % (`nvidia-smi`) | fixed blue (usage only)         |
 
 | Color  | Time stalled (`avg10`) | Meaning                          |
-|--------|------------------------|----------------------------------|
+| ------ | ---------------------- | -------------------------------- |
 | green  | below 5%               | healthy                          |
 | yellow | 5% to 20%              | noticeable stalls                |
 | red    | 20% or more            | the system is visibly struggling |
@@ -90,23 +91,65 @@ Examples:
 
 Notes:
 
-- PSI is system-wide. It cannot say *which* disk or core is responsible, so
+- PSI is system-wide. It cannot say _which_ disk or core is responsible, so
   the menu breaks usage down per disk.
 - The GPU has no PSI, so its badge shows usage only and is always blue.
 - At idle, all three colored badges stay green. That is the normal state.
 
 ## Requirements
 
-| Needed for            | Requirement |
-|-----------------------|-------------|
-| Running               | GNOME Shell **46** (Ubuntu 24.04) and a Linux kernel with PSI (`/proc/pressure/` exists) |
-| Installing from source| `git` and `make` |
-| GPU badge (optional)  | NVIDIA driver providing `nvidia-smi`. Without it the badge shows `GPU: n/a` |
-| `make check` / `make test` | Node.js (tested with v23.10) and Python 3 (JSON check) |
-| `make pack`           | `zip` |
+| Needed for                 | Requirement                                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Running                    | GNOME Shell **46** (Ubuntu 24.04) and a Linux kernel with PSI (`/proc/pressure/` exists)                 |
+| Installing from source     | `git` and `make`                                                                                         |
+| GPU badge (optional)       | NVIDIA driver providing `nvidia-smi`. Without it the badge shows `GPU: n/a`                              |
+| `make check` / `make test` | Node.js (tested with 22 and 23.10) and Python 3 (JSON check)                                             |
+| `make setup` / `make lint` | Node.js 22 LTS (pinned in `.nvmrc`) and [pre-commit](https://pre-commit.com) (`pipx install pre-commit`) |
+| `make pack`                | `zip`                                                                                                    |
+| `make deb`                 | `dpkg-deb` (Debian, Ubuntu and derivatives)                                                              |
 
 Tested on Ubuntu 24.04.2, GNOME Shell 46.0 (X11), NVIDIA RTX 3060.
 Run `make doctor` to check your machine.
+
+## Compatibility
+
+The extension and the `.deb` target **GNOME Shell 46**. What decides
+compatibility is your GNOME Shell version, not the distribution name. Check it
+with `gnome-shell --version`.
+
+| System                                                    | GNOME Shell                  | Status                                             |
+| --------------------------------------------------------- | ---------------------------- | -------------------------------------------------- |
+| Ubuntu 24.04 LTS                                          | 46                           | **Supported and tested**                           |
+| Ubuntu 22.04 LTS                                          | 42                           | Not supported                                      |
+| Any other release (Debian, Fedora, Arch, newer Ubuntu...) | check with the command above | Supported only if it reports 46; otherwise not yet |
+
+Other versions will be added after being tested, not guessed.
+
+Also required:
+
+- **GNOME Shell as the desktop.** KDE, XFCE, Cinnamon and similar are not
+  supported, whatever the distribution.
+- **A kernel with PSI.** Ubuntu 24.04 kernels have it on. If `/proc/pressure/`
+  does not exist, your kernel was built without PSI (`CONFIG_PSI`) or booted with
+  `psi=0`. On kernels built with `CONFIG_PSI_DEFAULT_DISABLED`, boot with `psi=1`.
+- **Architecture:** the package is `all` (plain JavaScript), so it is not tied
+  to a CPU. Only amd64 has been tested.
+- **Session:** X11 tested. Wayland is expected to work but is untested.
+
+What happens on an unsupported GNOME Shell:
+
+- **`.deb`:** `apt` refuses and changes nothing on your system, with a message
+  like this one (version numbers will differ):
+
+  ```
+  The following packages have unmet dependencies:
+   gnome-shell-extension-psi-monitor : Depends: gnome-shell (>= 47~) but 46.0 is to be installed
+  E: Unable to correct problems, you have held broken packages.
+  ```
+
+- **Zip or `make install`:** nothing checks at install time, but GNOME marks
+  the extension as incompatible and does not load it. `make doctor` warns about
+  this up front.
 
 ## Installation
 
@@ -129,6 +172,25 @@ Then enable it:
 ```bash
 make enable
 ```
+
+### From a .deb (Ubuntu and Debian)
+
+Download `gnome-shell-extension-psi-monitor_<VERSION>_all.deb` from the
+[Releases](https://github.com/pablomelo-inf/psi-monitor/releases) page, then:
+
+```bash
+sudo apt install ./gnome-shell-extension-psi-monitor_<VERSION>_all.deb
+# restart GNOME Shell as above, then:
+gnome-extensions enable psi-monitor@<HANDLE>
+```
+
+The package installs the extension for **all users** under
+`/usr/share/gnome-shell/extensions/`, and each user enables it for themselves.
+Installing does not enable the extension. It needs `sudo`, because it writes to
+system folders; the zip and `make install` below do not.
+
+It depends on **GNOME Shell 46** (Ubuntu 24.04). On any other version `apt`
+refuses to install it and changes nothing; see [Compatibility](#compatibility).
 
 ### From a release zip
 
@@ -170,6 +232,7 @@ the details menu.
 
 ```bash
 make uninstall                                  # installed from source
+sudo apt remove gnome-shell-extension-psi-monitor  # installed from the .deb
 gnome-extensions uninstall psi-monitor@<HANDLE> # installed from a zip
 ```
 
@@ -184,9 +247,10 @@ make config       # copies config.example.mk to config.mk (never overwrites)
 $EDITOR config.mk
 ```
 
-| Variable | Purpose |
-|----------|---------|
-| `HANDLE` | Suffix of the extension UUID: `psi-monitor@<HANDLE>`. Defaults to `local` without a `config.mk`. Use letters, digits and dashes. |
+| Variable         | Purpose                                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `HANDLE`         | Suffix of the extension UUID: `psi-monitor@<HANDLE>`. Defaults to `local` without a `config.mk`. Use letters, digits and dashes.          |
+| `DEB_MAINTAINER` | Optional. `Maintainer` field of the `.deb`, which is public inside the package. Defaults to `<HANDLE> <HANDLE@users.noreply.github.com>`. |
 
 Things to know:
 
@@ -243,12 +307,19 @@ psi-monitor/
 ├── test/                unit tests (Node)
 ├── bin/psi-monitor      wrapper: runs this project's make targets from anywhere
 ├── docs/screenshot.png  image used in this README
+├── packaging/deb/       templates for the .deb control and copyright files
 ├── scripts/release-notes.sh  extracts one version's notes from CHANGELOG.md
-├── .github/workflows/ci.yml  CI (check + tests) and automatic releases
+├── .github/workflows/ci.yml  CI (tests, lint, Trivy scan) and automatic releases
+├── .github/dependabot.yml    weekly updates for pinned actions and npm tools
 ├── CHANGELOG.md         release notes, one section per version
 ├── config.example.mk    template for your personal, gitignored config.mk
 ├── Makefile             entry point for every task
-├── package.json         dev-only: makes Node treat .js as ES modules
+├── package.json         dev-only: ES modules marker, Prettier and ESLint
+├── package-lock.json    locked dev dependency versions
+├── .pre-commit-config.yaml  every lint hook, used locally and in CI
+├── .prettierrc.json     formatting rules
+├── eslint.config.js     lint rules
+├── .nvmrc               Node version for the dev tools (22)
 ├── LICENSE
 ├── .editorconfig
 └── .gitignore
@@ -264,25 +335,30 @@ GNOME's runtime (GJS) and are exercised by running them in the shell.
 
 Run `make` with no arguments for the live list.
 
-| Target      | What it does |
-|-------------|--------------|
-| `help`      | list the targets (default) |
-| `config`    | create `config.mk` from `config.example.mk` if missing |
-| `install`   | copy the extension to GNOME and link the `psi-monitor` command |
-| `uninstall` | disable and remove the extension and the command link |
-| `link`      | symlink the `psi-monitor` command into `~/.local/bin` |
-| `unlink`    | remove that symlink |
-| `enable`    | enable the extension |
-| `disable`   | disable the extension (no error if missing) |
-| `status`    | show the state GNOME reports for the extension |
-| `reload`    | print how to restart GNOME Shell on X11 (it does not do it) |
-| `logs`      | follow GNOME Shell logs |
-| `version`   | print the extension version (from `metadata.json.in`) |
-| `doctor`    | check shell version, session, Node, PSI and config |
-| `check`     | validate `metadata.json` and the JS syntax |
-| `test`      | run the unit tests |
-| `pack`      | build `dist/psi-monitor@<HANDLE>.shell-extension.zip` |
-| `clean`     | remove `dist/` |
+| Target      | What it does                                                     |
+| ----------- | ---------------------------------------------------------------- |
+| `help`      | list the targets (default)                                       |
+| `config`    | create `config.mk` from `config.example.mk` if missing           |
+| `setup`     | install the dev tools (`npm ci`) and the git pre-commit hook     |
+| `hooks`     | install the git pre-commit hook                                  |
+| `lint`      | run every linter and format check on all files (same as CI)      |
+| `format`    | format JS, JSON, CSS, YAML and Markdown with Prettier            |
+| `install`   | copy the extension to GNOME and link the `psi-monitor` command   |
+| `uninstall` | disable and remove the extension and the command link            |
+| `link`      | symlink the `psi-monitor` command into `~/.local/bin`            |
+| `unlink`    | remove that symlink                                              |
+| `enable`    | enable the extension                                             |
+| `disable`   | disable the extension (no error if missing)                      |
+| `status`    | show the state GNOME reports for the extension                   |
+| `reload`    | print how to restart GNOME Shell on X11 (it does not do it)      |
+| `logs`      | follow GNOME Shell logs                                          |
+| `version`   | print the extension version (from `metadata.json.in`)            |
+| `doctor`    | check shell version, session, Node, PSI and config               |
+| `check`     | validate `metadata.json` and the JS syntax                       |
+| `test`      | run the unit tests                                               |
+| `pack`      | build `dist/psi-monitor@<HANDLE>.shell-extension.zip`            |
+| `deb`       | build `dist/gnome-shell-extension-psi-monitor_<VERSION>_all.deb` |
+| `clean`     | remove `dist/`                                                   |
 
 ### Workflow
 
@@ -294,11 +370,49 @@ make logs                     # in another terminal, if something looks wrong
 
 `make test` ends with a summary; success is `fail 0`.
 
+### Code quality and security
+
+One-time setup (Node 22 LTS, then the tools):
+
+```bash
+nvm use             # reads .nvmrc; or install Node 22 any other way
+pipx install pre-commit
+make setup          # npm ci + installs the git pre-commit hook
+```
+
+A single file, `.pre-commit-config.yaml`, drives everything. It runs on every
+commit for the staged files, with `make lint` for all files, and in CI.
+
+| Tool                                                               | What it checks                                                                                                           |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| [Prettier](https://prettier.io)                                    | formatting of JS, JSON, CSS, YAML and Markdown (`.prettierrc.json`); fixes files itself                                  |
+| [ESLint](https://eslint.org)                                       | JavaScript problems and style rules (`eslint.config.js`)                                                                 |
+| [ShellCheck](https://www.shellcheck.net)                           | the shell scripts in `bin/` and `scripts/`                                                                               |
+| [actionlint](https://github.com/rhysd/actionlint)                  | GitHub Actions workflows                                                                                                 |
+| [pre-commit-hooks](https://github.com/pre-commit/pre-commit-hooks) | trailing whitespace, final newline, valid YAML/JSON, merge markers, large files, committed private keys, executable bits |
+
+If Prettier changes a file, the commit stops: review `git diff`, `git add` the
+result and commit again. `git commit --no-verify` skips the hook in an
+emergency, but CI runs the same checks and will still fail.
+
+**Security scan.** CI also runs [Trivy](https://trivy.dev) on the repository. It
+looks for known vulnerabilities in `package-lock.json` (dev dependencies
+included), secrets committed by mistake and misconfigurations, and fails on
+`HIGH` or `CRITICAL` findings that have a fix. It runs on every push and pull
+request and **weekly**, because new vulnerabilities appear without new commits.
+The extension itself has no third-party runtime dependencies: this protects the
+dev toolchain that runs in CI and on your machine. A failing scan blocks the
+release.
+
+Actions in the workflow are pinned to full commit SHAs, and Dependabot proposes
+updates weekly.
+
 ### Releases
 
-Pushing to `main` runs `.github/workflows/ci.yml`. It always runs `make check`
-and `make test`, and it publishes a GitHub release **only when the version has
-no release yet**. A push that does not bump the version just runs the tests.
+Pushing to `main` runs `.github/workflows/ci.yml`. It always runs the unit
+tests, the linters and a Trivy security scan, and it publishes a GitHub release
+**only when all three pass and the version has no release yet**. A push that does
+not bump the version just runs the checks.
 
 To cut a release:
 
@@ -307,32 +421,34 @@ To cut a release:
    `## [X.Y.Z] - YYYY-MM-DD` section.
 3. Commit and push to `main`.
 
-The workflow then tags `vX.Y.Z`, builds
-`psi-monitor@<owner>.shell-extension.zip` plus a `SHA256SUMS` file (`<owner>` is
-the repository owner, used as the UUID suffix), and publishes the release with
-that version's `CHANGELOG.md` section as its notes. If the section is missing
+The workflow then tags `vX.Y.Z`, builds `psi-monitor@<owner>.shell-extension.zip`
+and `gnome-shell-extension-psi-monitor_X.Y.Z_all.deb` plus a `SHA256SUMS` file
+(`<owner>` is the repository owner, used as the UUID suffix), and publishes the
+release with that version's `CHANGELOG.md` section as its notes. If the section is missing
 or empty the job fails instead of publishing a release without notes.
 
 To preview the notes locally: `scripts/release-notes.sh X.Y.Z`.
 
 ### Contributing
 
-Issues and pull requests are welcome. Before opening a pull request, run
-`make check && make test`. Keep parsing logic in the GNOME-free modules under
-`lib/` and add a test for it.
+Issues and pull requests are welcome. Run `make setup` once so the git hook
+checks every commit, and before opening a pull request run
+`make lint && make check && make test`. Keep parsing logic in the GNOME-free
+modules under `lib/` and add a test for it.
 
 ## Troubleshooting
 
-| Symptom | Likely cause and fix |
-|---------|----------------------|
-| `make enable` says the extension "does not exist" | GNOME has not discovered it yet. Restart the shell (X11: `Alt+F2`, `r`, `Enter`), then enable again. |
-| Badges missing after enabling | `make status` should show `ACTIVE`. If it shows `ERROR`, run `make logs` and look for `psi-monitor` or `JS ERROR`. |
-| Badges show `…` | Normal for about 2 s: rates need two samples. |
-| `GPU: n/a` | `nvidia-smi` is missing or not in `PATH`, or the GPU is not NVIDIA. |
-| Usage looks wrong | Compare with `top` and `nvidia-smi`. If they disagree, open an issue with the `make doctor` output. |
-| Colored badges are always green | Normal: PSI is 0 when nothing is stalling. See below to force some load. |
-| `psi-monitor: command not found` | `~/.local/bin` is not in `PATH`. See [Usage](#usage). |
-| `gnome-extensions pack` crashes | It segfaults on some systems. Use `make pack`, which uses plain `zip`. |
+| Symptom                                                                                   | Likely cause and fix                                                                                                            |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `make enable` says the extension "does not exist"                                         | GNOME has not discovered it yet. Restart the shell (X11: `Alt+F2`, `r`, `Enter`), then enable again.                            |
+| Badges missing after enabling                                                             | `make status` should show `ACTIVE`. If it shows `ERROR`, run `make logs` and look for `psi-monitor` or `JS ERROR`.              |
+| Badges show `…`                                                                           | Normal for about 2 s: rates need two samples.                                                                                   |
+| `GPU: n/a`                                                                                | `nvidia-smi` is missing or not in `PATH`, or the GPU is not NVIDIA.                                                             |
+| Usage looks wrong                                                                         | Compare with `top` and `nvidia-smi`. If they disagree, open an issue with the `make doctor` output.                             |
+| Colored badges are always green                                                           | Normal: PSI is 0 when nothing is stalling. See below to force some load.                                                        |
+| `pre-commit: command not found`, or the hook says `npx` cannot find `prettier` / `eslint` | Install pre-commit with `pipx install pre-commit`, and the tools with `make setup` (it runs `npm ci`). Use Node 22 (`nvm use`). |
+| `psi-monitor: command not found`                                                          | `~/.local/bin` is not in `PATH`. See [Usage](#usage).                                                                           |
+| `gnome-extensions pack` crashes                                                           | It segfaults on some systems. Use `make pack`, which uses plain `zip`.                                                          |
 
 To see PSI move, create load on purpose. For CPU:
 
@@ -346,7 +462,7 @@ Each loop ends on its own after 20 s.
 
 ## Limitations
 
-- Declares support for GNOME Shell **46** only. Other versions are untested.
+- Supports GNOME Shell **46** only (see [Compatibility](#compatibility)). Other versions are untested.
 - Tested on **X11 only**. Wayland is expected to work but has not been tested.
 - GPU support is NVIDIA-only (through `nvidia-smi`).
 - The interface text is English only. There is no translation support.

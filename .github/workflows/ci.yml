@@ -1,12 +1,19 @@
 name: CI and release
 
-# Every push to main (and every pull request) runs the checks and tests.
-# A push to main also publishes a GitHub release, but only when the version
-# in metadata.json.in has no release yet. See "Releases" in the README.
+# Every push to main and every pull request runs the unit tests, the linters
+# (pre-commit) and a Trivy security scan. A push to main also publishes a
+# GitHub release, but only when all three pass and the version in
+# metadata.json.in has no release yet. See "Releases" in the README.
+#
+# Actions are pinned to full commit SHAs (the tag is in the comment), and
+# Dependabot keeps them up to date.
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Weekly: new vulnerabilities are published without any new commit.
+    - cron: '23 5 * * 1'
 
 permissions:
   contents: read
@@ -17,10 +24,13 @@ concurrency:
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
       - name: Check metadata and JS syntax
@@ -28,8 +38,52 @@ jobs:
       - name: Run unit tests
         run: make test
 
+  lint:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Prettier and ESLint
+        run: npm ci
+      - name: Install pre-commit
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/pre-commit"
+          "${RUNNER_TEMP}/pre-commit/bin/pip" install --quiet pre-commit==4.6.2
+          echo "${RUNNER_TEMP}/pre-commit/bin" >> "${GITHUB_PATH}"
+      - name: Run every hook on every file
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan the repository with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          # Also scan the npm dev dependencies (ESLint, Prettier): they run in CI
+          # and on developer machines. Trivy skips them by default.
+          TRIVY_INCLUDE_DEV_DEPS: 'true'
+        with:
+          scan-type: fs
+          scan-ref: .
+          # Known vulnerabilities in dependencies (package-lock.json), secrets
+          # committed by mistake, and misconfigurations.
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
   release:
-    needs: test
+    needs: [test, lint, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -41,7 +95,9 @@ jobs:
       # anyone's local config.mk.
       HANDLE: ${{ github.repository_owner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Decide whether a release is needed
         id: version
@@ -63,12 +119,14 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: bash scripts/release-notes.sh "${VERSION}" > release-notes.md
 
-      - name: Build the extension zip
+      - name: Build the zip and the .deb
         if: steps.version.outputs.publish == 'true'
         run: |
           make pack HANDLE="${HANDLE}"
+          make deb HANDLE="${HANDLE}"
           cd dist
-          sha256sum "psi-monitor@${HANDLE}.shell-extension.zip" > SHA256SUMS
+          sha256sum "psi-monitor@${HANDLE}.shell-extension.zip" \
+            gnome-shell-extension-psi-monitor_*_all.deb > SHA256SUMS
 
       - name: Publish the release
         if: steps.version.outputs.publish == 'true'
@@ -77,6 +135,7 @@ jobs:
         run: |
           gh release create "${TAG}" \
             "dist/psi-monitor@${HANDLE}.shell-extension.zip" \
+            dist/gnome-shell-extension-psi-monitor_*_all.deb \
             dist/SHA256SUMS \
             --title "${TAG}" \
             --notes-file release-notes.md \

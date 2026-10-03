@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import { test } from 'node:test';
 
-import {formatMiB, parseGpuLine} from '../lib/gpu.js';
+import { formatMiB, parseGpuLine } from '../lib/gpu.js';
 
 test('parseGpuLine reads a real nvidia-smi line', () => {
     assert.deepEqual(parseGpuLine('30, 26, 1051, 12288, 60'), {

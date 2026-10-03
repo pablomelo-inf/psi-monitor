@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import { test } from 'node:test';
 
 import {
     cpuUsagePercent,
@@ -33,7 +33,7 @@ test('parseMeminfo returns null without the required fields', () => {
 
 test('parseCpuStat separates busy from idle+iowait', () => {
     const stat = parseCpuStat('cpu  100 0 50 800 50 0 0 0 0 0\ncpu0 1 1 1 1 1 0 0 0 0 0\n');
-    assert.deepEqual(stat, {busy: 150, total: 1000});
+    assert.deepEqual(stat, { busy: 150, total: 1000 });
 });
 
 test('parseCpuStat returns null for garbage', () => {
@@ -42,10 +42,10 @@ test('parseCpuStat returns null for garbage', () => {
 });
 
 test('cpuUsagePercent compares two samples', () => {
-    const usage = cpuUsagePercent({busy: 100, total: 1000}, {busy: 200, total: 1200});
+    const usage = cpuUsagePercent({ busy: 100, total: 1000 }, { busy: 200, total: 1200 });
     assert.equal(usage, 50);
-    assert.equal(cpuUsagePercent(null, {busy: 1, total: 2}), null);
-    assert.equal(cpuUsagePercent({busy: 1, total: 5}, {busy: 1, total: 5}), null);
+    assert.equal(cpuUsagePercent(null, { busy: 1, total: 2 }), null);
+    assert.equal(cpuUsagePercent({ busy: 1, total: 5 }, { busy: 1, total: 5 }), null);
 });
 
 const DISKSTATS = [
@@ -59,12 +59,12 @@ const DISKSTATS = [
 test('parseDiskstats keeps whole disks only', () => {
     const disks = parseDiskstats(DISKSTATS);
     assert.deepEqual(Object.keys(disks).sort(), ['nvme0n1', 'sda', 'sdb']);
-    assert.deepEqual(disks.sda, {sectorsRead: 2000, sectorsWritten: 4000, ioTicksMs: 559780});
+    assert.deepEqual(disks.sda, { sectorsRead: 2000, sectorsWritten: 4000, ioTicksMs: 559780 });
 });
 
 test('diskRates computes busy percent and MB/s', () => {
-    const prev = {sectorsRead: 0, sectorsWritten: 0, ioTicksMs: 0};
-    const cur = {sectorsRead: 4000, sectorsWritten: 2000, ioTicksMs: 500};
+    const prev = { sectorsRead: 0, sectorsWritten: 0, ioTicksMs: 0 };
+    const cur = { sectorsRead: 4000, sectorsWritten: 2000, ioTicksMs: 500 };
     const rates = diskRates(prev, cur, 2000);
     assert.equal(rates.busyPercent, 25);
     assert.ok(Math.abs(rates.readMBs - 1.024) < 1e-9);
@@ -72,8 +72,18 @@ test('diskRates computes busy percent and MB/s', () => {
 });
 
 test('diskRates returns null without a previous sample or elapsed time', () => {
-    assert.equal(diskRates(undefined, {sectorsRead: 0, sectorsWritten: 0, ioTicksMs: 0}, 1000), null);
-    assert.equal(diskRates({sectorsRead: 0, sectorsWritten: 0, ioTicksMs: 0}, {sectorsRead: 0, sectorsWritten: 0, ioTicksMs: 0}, 0), null);
+    assert.equal(
+        diskRates(undefined, { sectorsRead: 0, sectorsWritten: 0, ioTicksMs: 0 }, 1000),
+        null,
+    );
+    assert.equal(
+        diskRates(
+            { sectorsRead: 0, sectorsWritten: 0, ioTicksMs: 0 },
+            { sectorsRead: 0, sectorsWritten: 0, ioTicksMs: 0 },
+            0,
+        ),
+        null,
+    );
 });
 
 test('diskOfDevice maps partitions to their whole disk', () => {
@@ -92,5 +102,5 @@ test('mountsByDisk groups mount points per disk', () => {
         'tmpfs /run tmpfs rw 0 0',
         '/dev/loop3 /snap/core ext4 ro 0 0',
     ].join('\n');
-    assert.deepEqual(mountsByDisk(mounts), {sda: ['/', '/boot/efi', '/home']});
+    assert.deepEqual(mountsByDisk(mounts), { sda: ['/', '/boot/efi', '/home'] });
 });

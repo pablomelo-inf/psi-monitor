@@ -1,0 +1,7 @@
+node_modules/
+dist/
+docs/
+package-lock.json
+LICENSE
+# Generated from metadata.json.in by make
+metadata.json

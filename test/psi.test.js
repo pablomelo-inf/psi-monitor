@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import { test } from 'node:test';
 
-import {formatPercent, instantPercent, levelFor, parsePressure} from '../lib/psi.js';
+import { formatPercent, instantPercent, levelFor, parsePressure } from '../lib/psi.js';
 
 const IO_SAMPLE = [
     'some avg10=22.20 avg60=9.25 avg300=2.22 total=99181834',
@@ -43,7 +43,7 @@ test('levelFor maps percentages to severity', () => {
 });
 
 test('levelFor honours custom thresholds', () => {
-    assert.equal(levelFor(3, {warn: 2, crit: 3}), 'crit');
+    assert.equal(levelFor(3, { warn: 2, crit: 3 }), 'crit');
 });
 
 test('formatPercent uses two decimals by default and accepts a custom count', () => {

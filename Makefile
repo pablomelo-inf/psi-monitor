@@ -6,14 +6,23 @@ SHELL := /bin/bash
 HANDLE    ?= local
 
 UUID      := psi-monitor@$(HANDLE)
+VERSION   := $(shell sed -n 's/.*"version-name": *"\([^"]*\)".*/\1/p' metadata.json.in)
+
+# .deb settings. The Maintainer field is public inside the package, so it
+# defaults to GitHub's noreply address for HANDLE. Override in config.mk.
+DEB_PKG        := gnome-shell-extension-psi-monitor
+DEB_MAINTAINER ?= $(HANDLE) <$(HANDLE)@users.noreply.github.com>
+HOMEPAGE       ?= https://github.com/$(HANDLE)/psi-monitor
+DEB_FILE       := dist/$(DEB_PKG)_$(VERSION)_all.deb
+DEB_ROOT       := dist/deb-root
 EXT_DIR   := $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
 BIN_DIR   := $(HOME)/.local/bin
 CLI       := psi-monitor
 SRC_FILES := extension.js metadata.json stylesheet.css lib
 JS_FILES  := extension.js $(wildcard lib/*.js) $(wildcard test/*.js)
 
-.PHONY: help config version metadata.json install uninstall link unlink enable \
-        disable status reload logs doctor check test pack clean
+.PHONY: help config setup hooks lint format version metadata.json install uninstall link \
+        unlink enable disable status reload logs doctor check test pack deb clean
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_.-]+:.*## / {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -22,8 +31,23 @@ config: ## Create config.mk from config.example.mk (if missing)
 	@if [ -e config.mk ]; then echo "config.mk already exists"; \
 	else cp config.example.mk config.mk && echo "Created config.mk: edit it with your values"; fi
 
+setup: ## Install the dev tools (npm packages) and the git pre-commit hook
+	@command -v npm >/dev/null || { echo "npm not found: install Node.js 22 (see .nvmrc)"; exit 1; }
+	@command -v pre-commit >/dev/null || { echo "pre-commit not found: pipx install pre-commit"; exit 1; }
+	npm ci
+	pre-commit install
+
+hooks: ## Install the git pre-commit hook
+	@pre-commit install
+
+lint: ## Run every linter and format check on all files (same as CI)
+	@pre-commit run --all-files --show-diff-on-failure
+
+format: ## Format JS, JSON, CSS, YAML and Markdown with Prettier
+	@npx --no-install prettier --write --ignore-unknown .
+
 version: ## Print the extension version
-	@sed -n 's/.*"version-name": *"\([^"]*\)".*/\1/p' metadata.json.in
+	@echo "$(VERSION)"
 
 # Generated from metadata.json.in so the personal UUID suffix never lives in git.
 # Phony on purpose: always rebuilt, so `make HANDLE=x ...` is honoured too.
@@ -70,6 +94,12 @@ doctor: ## Check the environment
 	@echo "Node:    $$(command -v node >/dev/null && node --version || echo missing '(needed for make test/check)')"
 	@[ -r /proc/pressure/io ] && echo "PSI:     available" || echo "PSI:     NOT available (kernel without CONFIG_PSI?)"
 	@echo "Metadata shell-version: $$(grep -o '"shell-version".*' metadata.json.in)"
+	@major="$$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | head -1)"; \
+	  supported="$$(grep -o '"shell-version".*' metadata.json.in | grep -oE '[0-9]+' | tr '\n' ' ')"; \
+	  case " $$supported " in \
+	    *" $$major "*) echo "Compat:  GNOME Shell $$major is supported" ;; \
+	    *) echo "Compat:  WARNING GNOME Shell $${major:-?} is not supported (supported: $$supported)" ;; \
+	  esac
 	@if [ -f config.mk ]; then echo "Config:  config.mk (HANDLE=$(HANDLE), UUID=$(UUID))"; \
 	else echo "Config:  none, using HANDLE=$(HANDLE) (run 'make config')"; fi
 
@@ -89,6 +119,30 @@ pack: check ## Build the release zip in dist/ (plain zip, no gjs needed)
 	@zip -qr "$(ZIP)" $(SRC_FILES)
 	@echo "Built $(ZIP)"
 	@unzip -l "$(ZIP)" | tail -n +4 | head -n -2
+
+deb: check ## Build a .deb package in dist/ (Debian/Ubuntu)
+	@command -v dpkg-deb >/dev/null || { echo "dpkg-deb not found (Debian/Ubuntu only)"; exit 1; }
+	@rm -rf "$(DEB_ROOT)"
+	@rm -f dist/*.deb
+	@install -d "$(DEB_ROOT)/DEBIAN" "$(DEB_ROOT)/usr/share/doc/$(DEB_PKG)" \
+	    "$(DEB_ROOT)/usr/share/gnome-shell/extensions/$(UUID)"
+	@cp -r $(SRC_FILES) "$(DEB_ROOT)/usr/share/gnome-shell/extensions/$(UUID)/"
+	@sed -e 's|@VERSION@|$(VERSION)|g' -e 's|@MAINTAINER@|$(DEB_MAINTAINER)|g' \
+	     -e 's|@HOMEPAGE@|$(HOMEPAGE)|g' packaging/deb/control.in > "$(DEB_ROOT)/DEBIAN/control"
+	@sed -e 's|@HOMEPAGE@|$(HOMEPAGE)|g' packaging/deb/copyright.in \
+	     > "$(DEB_ROOT)/usr/share/doc/$(DEB_PKG)/copyright"
+	@{ printf 'psi-monitor (%s) unstable; urgency=medium\n\n' "$(VERSION)"; \
+	    bash scripts/release-notes.sh "$(VERSION)" \
+	      | sed -e '/^###/d' -e '/./,$$!d' -e 's/^- /  * /' -e 's/^  \([^ *]\)/    \1/'; \
+	    printf '\n -- %s  %s\n' "$(DEB_MAINTAINER)" \
+	      "$$(date -R -u -d "@$${SOURCE_DATE_EPOCH:-$$(date +%s)}")"; \
+	  } | gzip -9n > "$(DEB_ROOT)/usr/share/doc/$(DEB_PKG)/changelog.gz"
+	@cd "$(DEB_ROOT)" && find usr -type f -exec md5sum {} + > DEBIAN/md5sums
+	@find "$(DEB_ROOT)" -type d -exec chmod 755 {} +
+	@find "$(DEB_ROOT)" -type f -exec chmod 644 {} +
+	@dpkg-deb --root-owner-group -Zxz --build "$(DEB_ROOT)" "$(DEB_FILE)" >/dev/null
+	@rm -rf "$(DEB_ROOT)"
+	@echo "Built $(DEB_FILE)"
 
 clean: ## Remove build output
 	@rm -rf dist

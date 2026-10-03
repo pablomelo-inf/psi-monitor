@@ -10,6 +10,18 @@ To publish a release, add a section for the new version below, bump
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-03
+
+### Added
+
+- `.deb` package for Debian and Ubuntu (`make deb`), attached to every release
+  next to the zip. It installs system-wide under
+  `/usr/share/gnome-shell/extensions/` and depends on GNOME Shell 46.
+- The release's `SHA256SUMS` now covers both the zip and the `.deb`.
+- `make doctor` warns when the GNOME Shell version is not supported.
+- README "Compatibility" section: supported GNOME Shell versions, kernel and
+  session requirements, and what `apt` does on an unsupported system.
+
 ## [0.1.0] - 2026-10-03
 
 ### Added
@@ -30,5 +42,6 @@ To publish a release, add a section for the new version below, bump
   generated from `metadata.json.in`.
 - Released under GPL-3.0-or-later.
 
-[Unreleased]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pablomelo-inf/psi-monitor/releases/tag/v0.1.0
