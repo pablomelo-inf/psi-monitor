@@ -55,7 +55,7 @@ This extension shows both: usage as the number, PSI as the color.
 
 - Badges for disk, CPU, memory, GPU (NVIDIA), and Wi-Fi and Ethernet speed.
 - Badge color from kernel pressure: green, yellow or red.
-- A menu, opened by clicking the badges, with what they cannot fit:
+- Each badge has its own menu, opened by clicking it, with the details the badge cannot fit:
   - PSI `some` / `full` over 10 s, 60 s and 5 min windows;
   - a "now (2s)" value with 3 decimals, computed from the kernel's
     cumulative counter (finer than the 2 decimals in `avg10`);
@@ -80,8 +80,8 @@ the last 10 s in which at least one task was stalled.
 | CPU      | usage % across all cores   | `/proc/pressure/cpu`            |
 | Memory   | RAM in use %               | `/proc/pressure/memory`         |
 | GPU      | GPU usage % (`nvidia-smi`) | fixed blue (usage only)         |
-| Wi-Fi    | download and upload speed  | teal when up, gray when down    |
-| Ethernet | download and upload speed  | teal when up, gray when down    |
+| Wi-Fi    | download and upload speed  | teal when connected, gray `off` |
+| Ethernet | download and upload speed  | teal when connected, gray `off` |
 
 | Color  | Time stalled (`avg10`) | Meaning                          |
 | ------ | ---------------------- | -------------------------------- |
@@ -101,7 +101,10 @@ Notes:
 - The GPU has no PSI, so its badge shows usage only and is always blue.
 - Network has no PSI either. The Wi-Fi and Ethernet badges show speed (bytes per second,
   decimal units) and appear only when such an interface exists. Only physical interfaces count:
-  Docker bridges, veth pairs and VPNs are ignored, so traffic is not counted twice.
+  Docker bridges, veth pairs and VPNs are ignored, so traffic is not counted twice. An interface
+  counts as connected when its link is up **and** it has an IPv4 route. Turning it off from the
+  desktop's network menu with the cable still plugged in leaves the physical link up, so the link
+  state alone would still look active.
 - At idle, all three colored badges stay green. That is the normal state.
 
 ## Requirements
@@ -233,8 +236,8 @@ make status       # expect "State: ACTIVE"
 ```
 
 The badges should appear on the right side of the top bar. For a moment they
-may show `…` until the second sample arrives (about 2 s). Click them to open
-the details menu.
+may show `…` until the second sample arrives (about 2 s). Click a badge to open
+its details menu.
 
 ### Uninstall
 
@@ -292,7 +295,7 @@ The extension runs inside GNOME Shell with your user's permissions. What it
 does:
 
 - **Reads** `/proc/pressure/{io,cpu,memory}`, `/proc/stat`, `/proc/meminfo`,
-  `/proc/diskstats`, `/proc/mounts`, `/proc/net/wireless` and, per disk,
+  `/proc/diskstats`, `/proc/mounts`, `/proc/net/route`, `/proc/net/wireless` and, per disk,
   `/sys/block/<disk>/size` and `/sys/block/<disk>/device/model`. For each
   physical network interface it reads `/sys/class/net/<name>/operstate`,
   `speed` and `statistics/{rx,tx}_bytes`.
@@ -517,6 +520,8 @@ Each loop ends on its own after 20 s.
 - PSI cannot attribute pressure to a specific disk or core.
 - Network badges show speed only: no Wi-Fi network name (that needs `nmcli`), and only physical
   interfaces are counted.
+- An interface only counts as connected if it has an IPv4 route, so a network that is IPv6-only
+  shows as `off`.
 - Needs a kernel with PSI enabled (`CONFIG_PSI`, and not turned off with
   `psi=0`).
 

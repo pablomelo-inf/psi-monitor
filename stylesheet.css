@@ -1,6 +1,7 @@
-.psi-box {
-    spacing: 4px;
-    padding: 0 2px;
+/* Each badge is its own panel button: keep the default gap small. */
+.panel-button.psi-button {
+    -natural-hpadding: 2px;
+    -minimum-hpadding: 2px;
 }
 
 .psi-pill {

@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import {
     classifyInterface,
     formatRate,
+    interfacesWithIpv4,
+    isConnected,
     isLinkUp,
     parseWireless,
     ratePerSecond,
@@ -72,23 +74,59 @@ test('formatRate picks a readable decimal unit', () => {
     assert.equal(formatRate(2_500_000_000), '2.50 GB/s');
 });
 
-test('summarize sums only the interfaces that are up', () => {
+const ROUTES = [
+    'Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT',
+    'wlo1\t00000000\t0164A8C0\t0003\t0\t0\t600\t00000000\t0\t0\t0',
+    'wlo1\t0064A8C0\t00000000\t0001\t0\t0\t600\t00FFFFFF\t0\t0\t0',
+    'docker0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0',
+    'eno3\t0000FEA9\t00000000\t0001\t0\t0\t1000\t0000FFFF\t0\t0\t0',
+].join('\n');
+
+test('interfacesWithIpv4 lists the interfaces that have a route', () => {
+    assert.deepEqual([...interfacesWithIpv4(ROUTES)].sort(), ['docker0', 'wlo1']);
+});
+
+test('interfacesWithIpv4 ignores link-local routes and the header', () => {
+    assert.equal(interfacesWithIpv4(ROUTES).has('eno3'), false);
+    assert.equal(interfacesWithIpv4(ROUTES).has('Iface'), false);
+});
+
+test('interfacesWithIpv4 returns an empty set for empty or garbage input', () => {
+    assert.equal(interfacesWithIpv4('').size, 0);
+    assert.equal(interfacesWithIpv4('header only\n').size, 0);
+});
+
+test('isConnected needs the link up and an IPv4 route', () => {
+    assert.equal(isConnected('up', true), true);
+    assert.equal(isConnected('up', false), false); // link up, turned off from the menu
+    assert.equal(isConnected('down', true), false);
+    assert.equal(isConnected('down', false), false);
+    assert.equal(isConnected('unknown', true), true);
+});
+
+test('isConnected falls back to the link state when routes are unknown', () => {
+    assert.equal(isConnected('up'), true);
+    assert.equal(isConnected('up', null), true);
+    assert.equal(isConnected('down', null), false);
+});
+
+test('summarize sums only the connected interfaces', () => {
     const group = [
-        { state: 'up', rxRate: 1000, txRate: 100 },
-        { state: 'up', rxRate: 500, txRate: 50 },
-        { state: 'down', rxRate: 9999, txRate: 9999 },
+        { connected: true, rxRate: 1000, txRate: 100 },
+        { connected: true, rxRate: 500, txRate: 50 },
+        { connected: false, rxRate: 9999, txRate: 9999 },
     ];
     assert.deepEqual(summarize(group), { up: true, rxRate: 1500, txRate: 150 });
 });
 
-test('summarize reports down when nothing is up and null rates before data', () => {
-    assert.deepEqual(summarize([{ state: 'down', rxRate: 1, txRate: 1 }]), {
+test('summarize reports down when nothing is connected and null rates before data', () => {
+    assert.deepEqual(summarize([{ connected: false, rxRate: 1, txRate: 1 }]), {
         up: false,
         rxRate: null,
         txRate: null,
     });
     assert.deepEqual(summarize([]), { up: false, rxRate: null, txRate: null });
-    assert.deepEqual(summarize([{ state: 'up', rxRate: null, txRate: null }]), {
+    assert.deepEqual(summarize([{ connected: true, rxRate: null, txRate: null }]), {
         up: true,
         rxRate: null,
         txRate: null,

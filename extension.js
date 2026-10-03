@@ -15,9 +15,20 @@ import { RESOURCES, formatPercent, levelFor } from './lib/psi.js';
 import { SystemSampler } from './lib/sampler.js';
 
 const REFRESH_SECONDS = 2;
-const LEVELS = ['ok', 'warn', 'crit'];
-const SHORT = { io: 'Disk', cpu: 'CPU', memory: 'Memory' };
+const TITLES = { io: 'Disk', cpu: 'CPU', memory: 'Memory' };
 const NET_LABEL = { wifi: 'Wi-Fi', ethernet: 'Ethernet' };
+// Color classes a badge can have: pressure levels, and "net" for a connected
+// network interface.
+const STATES = ['ok', 'warn', 'crit', 'net'];
+// Left to right in the top bar. Each one is its own button with its own menu.
+const BADGES = [
+    ['io', 'Disk'],
+    ['cpu', 'CPU'],
+    ['memory', 'Memory'],
+    ['gpu', 'GPU'],
+    ['wifi', 'Wi-Fi'],
+    ['ethernet', 'Ethernet'],
+];
 
 function windows(stats) {
     if (!stats) return 'n/a';
@@ -80,221 +91,144 @@ class GpuMonitor {
     }
 }
 
-const PsiIndicator = GObject.registerClass(
-    class PsiIndicator extends PanelMenu.Button {
-        _init(uuid) {
-            super._init(0.0, uuid, false);
+// One top-bar badge with its own menu, so clicking a badge shows only that
+// badge's details.
+const Badge = GObject.registerClass(
+    class Badge extends PanelMenu.Button {
+        _init(title, extraClass = null) {
+            super._init(0.0, title, false);
+            this.add_style_class_name('psi-button');
 
-            this._box = new St.BoxLayout({
-                style_class: 'psi-box',
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            this._pills = {};
-            for (const resource of RESOURCES)
-                this._pills[resource] = this._addPill(`${SHORT[resource]}: …`);
-            this._gpuPill = this._addPill('GPU: …');
-            this._gpuPill.add_style_class_name('psi-gpu');
-            this._netPills = {};
-            for (const kind of KINDS) {
-                this._netPills[kind] = this._addPill(`${NET_LABEL[kind]}: …`);
-                // Shown only once an interface of that kind exists.
-                this._netPills[kind].visible = false;
-            }
-            this.add_child(this._box);
-
-            this._addHeader('% of time stalled waiting  (10s  ·  60s  ·  5min)');
-            this._rows = {};
-            for (const resource of RESOURCES) {
-                this._rows[resource] = new PopupMenu.PopupMenuItem('', { reactive: false });
-                this.menu.addMenuItem(this._rows[resource]);
-            }
-
-            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-            this._addHeader('Disks  (busy % and speed, per disk)');
-            this._disksRow = new PopupMenu.PopupMenuItem('', { reactive: false });
-            this.menu.addMenuItem(this._disksRow);
-
-            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-            this._addHeader('Network  (speed per physical interface)');
-            this._netRow = new PopupMenu.PopupMenuItem('', { reactive: false });
-            this.menu.addMenuItem(this._netRow);
-
-            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-            this._addHeader('GPU  (current usage, not pressure)');
-            this._gpuRow = new PopupMenu.PopupMenuItem('', { reactive: false });
-            this.menu.addMenuItem(this._gpuRow);
-        }
-
-        _addPill(text) {
-            const pill = new St.Label({
-                text,
+            this._pill = new St.Label({
+                text: `${title}: …`,
                 y_align: Clutter.ActorAlign.CENTER,
                 style_class: 'psi-pill',
             });
-            this._box.add_child(pill);
-            return pill;
+            if (extraClass) this._pill.add_style_class_name(extraClass);
+            this.add_child(this._pill);
+
+            this._headingItem = new PopupMenu.PopupMenuItem('', { reactive: false });
+            this._headingItem.label.add_style_class_name('psi-header');
+            this.menu.addMenuItem(this._headingItem);
+            this._bodyItem = new PopupMenu.PopupMenuItem('', { reactive: false });
+            this.menu.addMenuItem(this._bodyItem);
         }
 
-        _addHeader(text) {
-            const header = new PopupMenu.PopupMenuItem(text, { reactive: false });
-            header.label.add_style_class_name('psi-header');
-            this.menu.addMenuItem(header);
-        }
-
-        update(snapshot) {
-            for (const resource of RESOURCES) {
-                // The number is what you expect to read (usage); the color is the
-                // kernel's pressure verdict (green/yellow/red), see `_describe`.
-                const pressure = snapshot.psi[resource]?.some?.avg10;
-                const usage = this._usage(resource, snapshot);
-                const pill = this._pills[resource];
-
-                this._setLevel(pill, pressure === undefined ? null : levelFor(pressure));
-                pill.set_text(
-                    `${SHORT[resource]}: ${usage === null ? '…' : formatPercent(usage, 1)}`,
-                );
-                this._rows[resource].label.set_text(this._describe(resource, snapshot));
-            }
-            this._disksRow.label.set_text(this._describeDisks(snapshot.disks));
-            this._updateNetwork(snapshot.net);
-        }
-
-        // Network has no pressure metric: the badge shows speed, and is teal
-        // while the link is up and gray when it is down.
-        _updateNetwork(interfaces) {
-            for (const kind of KINDS) {
-                const group = interfaces.filter((item) => item.kind === kind);
-                const pill = this._netPills[kind];
-                pill.visible = group.length > 0;
-                if (group.length === 0) continue;
-
-                const label = NET_LABEL[kind];
-                const { up, rxRate, txRate } = summarize(group);
-                if (up) pill.add_style_class_name('psi-net');
-                else pill.remove_style_class_name('psi-net');
-
-                if (!up) pill.set_text(`${label}: down`);
-                else if (rxRate === null) pill.set_text(`${label}: …`);
-                else pill.set_text(`${label} ↓ ${formatRate(rxRate)} ↑ ${formatRate(txRate)}`);
-            }
-            this._netRow.label.set_text(this._describeNetwork(interfaces));
-        }
-
-        _describeNetwork(interfaces) {
-            if (interfaces.length === 0) return 'no physical network interfaces found';
-
-            return interfaces
-                .map((item) => {
-                    const facts = [
-                        item.name,
-                        NET_LABEL[item.kind],
-                        isLinkUp(item.state) ? 'up' : item.state,
-                    ];
-                    if (item.speedMbps) facts.push(`link ${item.speedMbps} Mb/s`);
-                    if (item.signal)
-                        facts.push(
-                            `signal ${item.signal.levelDbm} dBm (quality ${item.signal.quality})`,
-                        );
-
-                    const rates =
-                        item.rxRate === null
-                            ? 'measuring…'
-                            : `↓ ${formatRate(item.rxRate)}  ↑ ${formatRate(item.txRate)}`;
-                    return `${facts.join('  ·  ')}\n  ${rates}`;
-                })
-                .join('\n');
-        }
-
-        // The value shown inside each pill: how much of the resource is in use.
-        _usage(resource, { cpuUsage, mem, disks }) {
-            if (resource === 'cpu') return cpuUsage;
-            if (resource === 'memory') return mem ? (100 * mem.usedMiB) / mem.totalMiB : null;
-
-            const busy = disks.map((d) => d.rates?.busyPercent).filter((v) => v !== undefined);
-            return busy.length > 0 ? Math.max(...busy) : null;
-        }
-
-        _describe(resource, snapshot) {
-            const { psi, instant, cores, cpuUsage, mem, disks } = snapshot;
-            const data = psi[resource];
-            const titles = {
-                io: 'Disk (I/O)  ·  number = busiest disk',
-                cpu: `CPU  ·  number = usage, ${cores} cores`,
-                memory: 'Memory  ·  number = RAM in use',
-            };
-            if (!data) return `${titles[resource]}: n/a`;
-
-            const now = instant[resource];
-            const lines = [
-                titles[resource],
-                '  color = pressure (time stalled waiting):',
-                `  some  ${windows(data.some)}`,
-                `  full   ${windows(data.full)}`,
-                `  now (${REFRESH_SECONDS}s): ${now === null ? 'measuring…' : formatPercent(now, 3)}`,
-            ];
-
-            if (resource === 'io') {
-                const busiest = disks
-                    .filter((d) => d.rates)
-                    .sort((a, b) => b.rates.busyPercent - a.rates.busyPercent)[0];
-                if (busiest)
-                    lines.push(
-                        `  busiest: ${busiest.name} (${formatPercent(busiest.rates.busyPercent, 1)})`,
-                    );
-            }
-
-            if (resource === 'cpu' && cpuUsage !== null)
-                lines.push(`  usage: ${formatPercent(cpuUsage, 1)} of ${cores} cores`);
-
-            if (resource === 'memory' && mem) {
-                const usedPercent = (100 * mem.usedMiB) / mem.totalMiB;
-                lines.push(
-                    `  RAM in use: ${formatMiB(mem.usedMiB)} of ${formatMiB(mem.totalMiB)} (${formatPercent(usedPercent, 0)})`,
-                );
-                lines.push(
-                    `  swap: ${formatMiB(mem.swapUsedMiB)} of ${formatMiB(mem.swapTotalMiB)}`,
-                );
-            }
-            return lines.join('\n');
-        }
-
-        _describeDisks(disks) {
-            if (disks.length === 0) return 'no disks found';
-
-            return disks
-                .map((disk) => {
-                    const where = disk.mounts.length > 0 ? disk.mounts.join(', ') : 'not mounted';
-                    const speed = disk.rates
-                        ? `busy ${formatPercent(disk.rates.busyPercent, 1)}  ·  reads ${disk.rates.readMBs.toFixed(1)} MB/s  ·  writes ${disk.rates.writeMBs.toFixed(1)} MB/s`
-                        : 'measuring…';
-                    return `${disk.name}  ·  ${disk.model}  ·  ${disk.sizeGiB} GiB\n  mounted on: ${where}\n  ${speed}`;
-                })
-                .join('\n');
-        }
-
-        updateGpu(gpu) {
-            if (!gpu) {
-                this._gpuPill.set_text('GPU: n/a');
-                this._gpuRow.label.set_text('nvidia-smi unavailable');
-                return;
-            }
-            this._gpuPill.set_text(`GPU: ${Math.round(gpu.util)}%`);
-            this._gpuRow.label.set_text(
-                `Usage ${Math.round(gpu.util)}%  ·  VRAM ${formatMiB(gpu.memUsedMiB)} / ${formatMiB(gpu.memTotalMiB)}  ·  ${Math.round(gpu.tempC)}°C`,
-            );
-        }
-
-        _setLevel(pill, level) {
-            for (const name of LEVELS) pill.remove_style_class_name(`psi-${name}`);
-            if (level) pill.add_style_class_name(`psi-${level}`);
+        // `state` is one of STATES (the badge color), or null for none.
+        setContent({ text, state = null, heading, body }) {
+            this._pill.set_text(text);
+            for (const name of STATES) this._pill.remove_style_class_name(`psi-${name}`);
+            if (state) this._pill.add_style_class_name(`psi-${state}`);
+            this._headingItem.label.set_text(heading);
+            this._bodyItem.label.set_text(body);
         }
     },
 );
 
+// The value shown inside each pill: how much of the resource is in use.
+function usageOf(resource, { cpuUsage, mem, disks }) {
+    if (resource === 'cpu') return cpuUsage;
+    if (resource === 'memory') return mem ? (100 * mem.usedMiB) / mem.totalMiB : null;
+
+    const busy = disks.map((d) => d.rates?.busyPercent).filter((v) => v !== undefined);
+    return busy.length > 0 ? Math.max(...busy) : null;
+}
+
+function describeDisks(disks) {
+    if (disks.length === 0) return 'no disks found';
+
+    return disks
+        .map((disk) => {
+            const where = disk.mounts.length > 0 ? disk.mounts.join(', ') : 'not mounted';
+            const speed = disk.rates
+                ? `busy ${formatPercent(disk.rates.busyPercent, 1)}  ·  reads ${disk.rates.readMBs.toFixed(1)} MB/s  ·  writes ${disk.rates.writeMBs.toFixed(1)} MB/s`
+                : 'measuring…';
+            return `${disk.name}  ·  ${disk.model}  ·  ${disk.sizeGiB} GiB\n  mounted on: ${where}\n  ${speed}`;
+        })
+        .join('\n');
+}
+
+// Heading and body of the menu of the Disk, CPU and Memory badges.
+function pressureDetails(resource, snapshot) {
+    const { psi, instant, cores, cpuUsage, mem, disks } = snapshot;
+    const headings = {
+        io: 'Disk (I/O)  ·  number = busiest disk',
+        cpu: `CPU  ·  number = usage, ${cores} cores`,
+        memory: 'Memory  ·  number = RAM in use',
+    };
+    const heading = headings[resource];
+
+    const data = psi[resource];
+    if (!data) return { heading, body: 'n/a' };
+
+    const now = instant[resource];
+    const lines = [
+        'color = pressure (time stalled waiting):',
+        `  some  ${windows(data.some)}`,
+        `  full   ${windows(data.full)}`,
+        `  now (${REFRESH_SECONDS}s): ${now === null ? 'measuring…' : formatPercent(now, 3)}`,
+    ];
+
+    if (resource === 'io') {
+        const busiest = disks
+            .filter((d) => d.rates)
+            .sort((a, b) => b.rates.busyPercent - a.rates.busyPercent)[0];
+        if (busiest)
+            lines.push(
+                `  busiest: ${busiest.name} (${formatPercent(busiest.rates.busyPercent, 1)})`,
+            );
+        lines.push('', 'Disks  (busy % and speed, per disk):', describeDisks(disks));
+    }
+
+    if (resource === 'cpu' && cpuUsage !== null)
+        lines.push(`  usage: ${formatPercent(cpuUsage, 1)} of ${cores} cores`);
+
+    if (resource === 'memory' && mem) {
+        const usedPercent = (100 * mem.usedMiB) / mem.totalMiB;
+        lines.push(
+            `  RAM in use: ${formatMiB(mem.usedMiB)} of ${formatMiB(mem.totalMiB)} (${formatPercent(usedPercent, 0)})`,
+            `  swap: ${formatMiB(mem.swapUsedMiB)} of ${formatMiB(mem.swapTotalMiB)}`,
+        );
+    }
+    return { heading, body: lines.join('\n') };
+}
+
+// "link up, no IPv4 address" is what an interface turned off from the network
+// menu looks like while its cable is still plugged in.
+function describeStatus(item) {
+    if (item.connected) return 'connected';
+    return isLinkUp(item.state) ? 'link up, no IPv4 address' : item.state;
+}
+
+function describeInterfaces(interfaces) {
+    return interfaces
+        .map((item) => {
+            const facts = [item.name, NET_LABEL[item.kind], describeStatus(item)];
+            if (item.speedMbps) facts.push(`link ${item.speedMbps} Mb/s`);
+            if (item.signal)
+                facts.push(`signal ${item.signal.levelDbm} dBm (quality ${item.signal.quality})`);
+
+            const rates =
+                item.rxRate === null
+                    ? 'measuring…'
+                    : `↓ ${formatRate(item.rxRate)}  ↑ ${formatRate(item.txRate)}`;
+            return `${facts.join('  ·  ')}\n  ${rates}`;
+        })
+        .join('\n');
+}
+
 export default class PsiMonitorExtension extends Extension {
     enable() {
-        this._indicator = new PsiIndicator(this.uuid);
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
+        this._badges = {};
+        BADGES.forEach(([key, title], index) => {
+            const badge = new Badge(title, key === 'gpu' ? 'psi-gpu' : null);
+            // One role per badge. The explicit index keeps them in this order,
+            // left to right, ahead of the other items on the right side.
+            Main.panel.addToStatusArea(`${this.uuid}-${key}`, badge, index, 'right');
+            this._badges[key] = badge;
+        });
+        // Shown only once an interface of that kind exists.
+        for (const kind of KINDS) this._badges[kind].visible = false;
 
         this._sampler = new SystemSampler();
         this._refresh();
@@ -303,7 +237,7 @@ export default class PsiMonitorExtension extends Extension {
             return GLib.SOURCE_CONTINUE;
         });
 
-        this._gpu = new GpuMonitor((gpu) => this._indicator?.updateGpu(gpu));
+        this._gpu = new GpuMonitor((gpu) => this._showGpu(gpu));
         this._gpu.start();
     }
 
@@ -316,11 +250,60 @@ export default class PsiMonitorExtension extends Extension {
             this._timeoutId = null;
         }
         this._sampler = null;
-        this._indicator?.destroy();
-        this._indicator = null;
+        for (const badge of Object.values(this._badges ?? {})) badge.destroy();
+        this._badges = null;
     }
 
     _refresh() {
-        this._indicator?.update(this._sampler.sample());
+        if (this._badges) this._render(this._sampler.sample());
+    }
+
+    _render(snapshot) {
+        for (const resource of RESOURCES) {
+            // The number is what you expect to read (usage); the color is the
+            // kernel's pressure verdict (green/yellow/red).
+            const pressure = snapshot.psi[resource]?.some?.avg10;
+            const usage = usageOf(resource, snapshot);
+            this._badges[resource].setContent({
+                text: `${TITLES[resource]}: ${usage === null ? '…' : formatPercent(usage, 1)}`,
+                state: pressure === undefined ? null : levelFor(pressure),
+                ...pressureDetails(resource, snapshot),
+            });
+        }
+
+        // Network has no pressure metric: the badge shows speed, and is teal
+        // while the interface is connected and gray ("off") otherwise.
+        for (const kind of KINDS) {
+            const group = snapshot.net.filter((item) => item.kind === kind);
+            const badge = this._badges[kind];
+            badge.visible = group.length > 0;
+            if (group.length === 0) continue;
+
+            const label = NET_LABEL[kind];
+            const { up, rxRate, txRate } = summarize(group);
+            let text;
+            if (!up) text = `${label}: off`;
+            else if (rxRate === null) text = `${label}: …`;
+            else text = `${label} ↓ ${formatRate(rxRate)} ↑ ${formatRate(txRate)}`;
+
+            badge.setContent({
+                text,
+                state: up ? 'net' : null,
+                heading: `${label}  ·  number = download and upload speed`,
+                body: describeInterfaces(group),
+            });
+        }
+    }
+
+    _showGpu(gpu) {
+        // The nvidia-smi callback can fire after disable().
+        if (!this._badges) return;
+        this._badges.gpu.setContent({
+            text: gpu ? `GPU: ${Math.round(gpu.util)}%` : 'GPU: n/a',
+            heading: 'GPU  ·  current usage, not pressure',
+            body: gpu
+                ? `Usage ${Math.round(gpu.util)}%  ·  VRAM ${formatMiB(gpu.memUsedMiB)} / ${formatMiB(gpu.memTotalMiB)}  ·  ${Math.round(gpu.tempC)}°C`
+                : 'nvidia-smi unavailable',
+        });
     }
 }

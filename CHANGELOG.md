@@ -10,6 +10,21 @@ To publish a release, add a section for the new version below, bump
 
 ## [Unreleased]
 
+### Changed
+
+- Each badge is now its own button with its own menu, so clicking a badge shows
+  only its details (before, every badge opened one menu with everything).
+
+### Fixed
+
+- The Ethernet and Wi-Fi badges stayed active after turning the interface off
+  from the desktop's network menu while its cable was still plugged in: the
+  physical link stays up, and the kernel can keep stale IPv6 addresses on it.
+  An interface now counts as connected only when its link is up and it has an
+  IPv4 route, and the badge shows `off` otherwise. The menu says
+  `link up, no IPv4 address` for that case. Networks that are IPv6-only show
+  as `off`.
+
 ## [0.3.0] - 2026-10-03
 
 ### Added
