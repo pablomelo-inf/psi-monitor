@@ -1,11 +1,11 @@
 # PSI Monitor
 
-A GNOME Shell extension that puts **disk, CPU, memory and GPU** in the top bar
-as four colored badges. The number says _how much_ is in use. The color says
+A GNOME Shell extension that puts **disk, CPU, memory, GPU and network speed** in
+the top bar as colored badges. The number says _how much_ is in use. The color says
 whether the system is actually _struggling_ because of it, using the Linux
 kernel's Pressure Stall Information (PSI).
 
-![The four badges in the GNOME top bar](docs/screenshot.png)
+![The badges in the GNOME top bar](docs/screenshot.png)
 
 ## Quick start
 
@@ -53,7 +53,7 @@ This extension shows both: usage as the number, PSI as the color.
 
 ## Features
 
-- Four badges: disk, CPU, memory and GPU (NVIDIA).
+- Badges for disk, CPU, memory, GPU (NVIDIA), and Wi-Fi and Ethernet speed.
 - Badge color from kernel pressure: green, yellow or red.
 - A menu, opened by clicking the badges, with what they cannot fit:
   - PSI `some` / `full` over 10 s, 60 s and 5 min windows;
@@ -62,7 +62,9 @@ This extension shows both: usage as the number, PSI as the color.
   - **per-disk** busy %, read/write MB/s and mount points;
   - CPU core count and real usage;
   - RAM and swap in use;
-  - GPU usage, VRAM and temperature.
+  - GPU usage, VRAM and temperature;
+  - Wi-Fi and Ethernet: link state, link speed, Wi-Fi signal, download and upload speed per
+    interface.
 - Few moving parts: a handful of tiny `/proc` reads every 2 s, plus one
   long-running `nvidia-smi` process read asynchronously.
 - Everything created in `enable()` is released in `disable()`.
@@ -72,12 +74,14 @@ This extension shows both: usage as the number, PSI as the color.
 The **number** is usage. The **color** is pressure: `some avg10`, the share of
 the last 10 s in which at least one task was stalled.
 
-| Badge  | Number                     | Color comes from                |
-| ------ | -------------------------- | ------------------------------- |
-| Disk   | busy % of the busiest disk | `/proc/pressure/io` (all disks) |
-| CPU    | usage % across all cores   | `/proc/pressure/cpu`            |
-| Memory | RAM in use %               | `/proc/pressure/memory`         |
-| GPU    | GPU usage % (`nvidia-smi`) | fixed blue (usage only)         |
+| Badge    | Number                     | Color comes from                |
+| -------- | -------------------------- | ------------------------------- |
+| Disk     | busy % of the busiest disk | `/proc/pressure/io` (all disks) |
+| CPU      | usage % across all cores   | `/proc/pressure/cpu`            |
+| Memory   | RAM in use %               | `/proc/pressure/memory`         |
+| GPU      | GPU usage % (`nvidia-smi`) | fixed blue (usage only)         |
+| Wi-Fi    | download and upload speed  | teal when up, gray when down    |
+| Ethernet | download and upload speed  | teal when up, gray when down    |
 
 | Color  | Time stalled (`avg10`) | Meaning                          |
 | ------ | ---------------------- | -------------------------------- |
@@ -95,6 +99,9 @@ Notes:
 - PSI is system-wide. It cannot say _which_ disk or core is responsible, so
   the menu breaks usage down per disk.
 - The GPU has no PSI, so its badge shows usage only and is always blue.
+- Network has no PSI either. The Wi-Fi and Ethernet badges show speed (bytes per second,
+  decimal units) and appear only when such an interface exists. Only physical interfaces count:
+  Docker bridges, veth pairs and VPNs are ignored, so traffic is not counted twice.
 - At idle, all three colored badges stay green. That is the normal state.
 
 ## Requirements
@@ -225,7 +232,7 @@ unzip -o psi-monitor@<HANDLE>.shell-extension.zip \
 make status       # expect "State: ACTIVE"
 ```
 
-Four badges should appear on the right side of the top bar. For a moment they
+The badges should appear on the right side of the top bar. For a moment they
 may show `…` until the second sample arrives (about 2 s). Click them to open
 the details menu.
 
@@ -285,11 +292,15 @@ The extension runs inside GNOME Shell with your user's permissions. What it
 does:
 
 - **Reads** `/proc/pressure/{io,cpu,memory}`, `/proc/stat`, `/proc/meminfo`,
-  `/proc/diskstats`, `/proc/mounts` and, per disk, `/sys/block/<disk>/size`
-  and `/sys/block/<disk>/device/model`.
+  `/proc/diskstats`, `/proc/mounts`, `/proc/net/wireless` and, per disk,
+  `/sys/block/<disk>/size` and `/sys/block/<disk>/device/model`. For each
+  physical network interface it reads `/sys/class/net/<name>/operstate`,
+  `speed` and `statistics/{rx,tx}_bytes`.
 - **Runs** `nvidia-smi` with a read-only query (utilization, memory,
   temperature). Nothing is run if it is not installed.
-- **Does not** use the network, write files, or need root.
+- **Does not** send, capture or inspect network traffic (it only reads the
+  byte counters the kernel already keeps), open connections, write files, or
+  need root.
 
 ## Performance
 
@@ -301,12 +312,12 @@ calls, not in the language, so the language is not a factor here.
 Measured on one machine (Ubuntu 24.04, GNOME Shell 46 on X11, 16 cores, two
 SSDs, one NVIDIA GPU):
 
-| What                                                                | Result                                |
-| ------------------------------------------------------------------- | ------------------------------------- |
-| One full sample (PSI, CPU, memory, per-disk counters, mount points) | about 0.4 ms                          |
-| That sample, taken every 2 s                                        | about 0.02% of one core               |
-| The long-running `nvidia-smi` process, over a 20 s window           | about 0.05% of one core, about 21 MiB |
-| For scale: the whole `gnome-shell` process, same 20 s window        | about 3.7% of one core                |
+| What                                                          | Result                                |
+| ------------------------------------------------------------- | ------------------------------------- |
+| One full sample (PSI, CPU, memory, disk and network counters) | about 0.8 ms                          |
+| That sample, taken every 2 s                                  | about 0.04% of one core               |
+| The long-running `nvidia-smi` process, over a 20 s window     | about 0.05% of one core, about 21 MiB |
+| For scale: the whole `gnome-shell` process, same 20 s window  | about 3.7% of one core                |
 
 How it was measured: the sampler was called 5000 times under `gjs`, with the
 `gjs` start-up time subtracted. Process CPU came from `/proc/<pid>/stat` over 20
@@ -504,6 +515,8 @@ Each loop ends on its own after 20 s.
 - GPU support is NVIDIA-only (through `nvidia-smi`).
 - The interface text is English only. There is no translation support.
 - PSI cannot attribute pressure to a specific disk or core.
+- Network badges show speed only: no Wi-Fi network name (that needs `nmcli`), and only physical
+  interfaces are counted.
 - Needs a kernel with PSI enabled (`CONFIG_PSI`, and not turned off with
   `psi=0`).
 

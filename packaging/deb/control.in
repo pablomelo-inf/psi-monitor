@@ -7,14 +7,16 @@ Depends: gnome-shell (>= 46~), gnome-shell (<< 47~)
 Maintainer: @MAINTAINER@
 Homepage: @HOMEPAGE@
 Description: CPU, memory, disk and GPU badges for the GNOME top bar
- Shows four colored badges in the top bar. Each badge shows how much of the
- resource is in use, and its color (green, yellow or red) comes from the
- kernel's Pressure Stall Information (PSI), so it reflects whether tasks are
- actually stalling and not only how busy the resource is.
+ Shows colored badges in the top bar for disk, CPU, memory and GPU, plus
+ Wi-Fi and Ethernet speed. For disk, CPU and memory the badge shows how much
+ of the resource is in use, and its color (green, yellow or red) comes from
+ the kernel's Pressure Stall Information (PSI), so it reflects whether tasks
+ are actually stalling and not only how busy the resource is.
  .
  A menu shows PSI over 10 seconds, 60 seconds and 5 minutes, per-disk busy
- time and throughput, CPU, RAM and swap usage, and NVIDIA GPU usage, VRAM and
- temperature when nvidia-smi is available.
+ time and throughput, CPU, RAM and swap usage, Wi-Fi and Ethernet link state
+ and speed, and NVIDIA GPU usage, VRAM and temperature when nvidia-smi is
+ available.
  .
  Requires GNOME Shell 46, as shipped by Ubuntu 24.04 LTS. After installing,
  restart GNOME Shell and enable the extension with gnome-extensions enable.

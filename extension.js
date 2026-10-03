@@ -10,12 +10,14 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { GPU_QUERY, formatMiB, parseGpuLine } from './lib/gpu.js';
+import { KINDS, formatRate, isLinkUp, summarize } from './lib/network.js';
 import { RESOURCES, formatPercent, levelFor } from './lib/psi.js';
 import { SystemSampler } from './lib/sampler.js';
 
 const REFRESH_SECONDS = 2;
 const LEVELS = ['ok', 'warn', 'crit'];
 const SHORT = { io: 'Disk', cpu: 'CPU', memory: 'Memory' };
+const NET_LABEL = { wifi: 'Wi-Fi', ethernet: 'Ethernet' };
 
 function windows(stats) {
     if (!stats) return 'n/a';
@@ -92,6 +94,12 @@ const PsiIndicator = GObject.registerClass(
                 this._pills[resource] = this._addPill(`${SHORT[resource]}: …`);
             this._gpuPill = this._addPill('GPU: …');
             this._gpuPill.add_style_class_name('psi-gpu');
+            this._netPills = {};
+            for (const kind of KINDS) {
+                this._netPills[kind] = this._addPill(`${NET_LABEL[kind]}: …`);
+                // Shown only once an interface of that kind exists.
+                this._netPills[kind].visible = false;
+            }
             this.add_child(this._box);
 
             this._addHeader('% of time stalled waiting  (10s  ·  60s  ·  5min)');
@@ -105,6 +113,11 @@ const PsiIndicator = GObject.registerClass(
             this._addHeader('Disks  (busy % and speed, per disk)');
             this._disksRow = new PopupMenu.PopupMenuItem('', { reactive: false });
             this.menu.addMenuItem(this._disksRow);
+
+            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            this._addHeader('Network  (speed per physical interface)');
+            this._netRow = new PopupMenu.PopupMenuItem('', { reactive: false });
+            this.menu.addMenuItem(this._netRow);
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             this._addHeader('GPU  (current usage, not pressure)');
@@ -143,6 +156,53 @@ const PsiIndicator = GObject.registerClass(
                 this._rows[resource].label.set_text(this._describe(resource, snapshot));
             }
             this._disksRow.label.set_text(this._describeDisks(snapshot.disks));
+            this._updateNetwork(snapshot.net);
+        }
+
+        // Network has no pressure metric: the badge shows speed, and is teal
+        // while the link is up and gray when it is down.
+        _updateNetwork(interfaces) {
+            for (const kind of KINDS) {
+                const group = interfaces.filter((item) => item.kind === kind);
+                const pill = this._netPills[kind];
+                pill.visible = group.length > 0;
+                if (group.length === 0) continue;
+
+                const label = NET_LABEL[kind];
+                const { up, rxRate, txRate } = summarize(group);
+                if (up) pill.add_style_class_name('psi-net');
+                else pill.remove_style_class_name('psi-net');
+
+                if (!up) pill.set_text(`${label}: down`);
+                else if (rxRate === null) pill.set_text(`${label}: …`);
+                else pill.set_text(`${label} ↓ ${formatRate(rxRate)} ↑ ${formatRate(txRate)}`);
+            }
+            this._netRow.label.set_text(this._describeNetwork(interfaces));
+        }
+
+        _describeNetwork(interfaces) {
+            if (interfaces.length === 0) return 'no physical network interfaces found';
+
+            return interfaces
+                .map((item) => {
+                    const facts = [
+                        item.name,
+                        NET_LABEL[item.kind],
+                        isLinkUp(item.state) ? 'up' : item.state,
+                    ];
+                    if (item.speedMbps) facts.push(`link ${item.speedMbps} Mb/s`);
+                    if (item.signal)
+                        facts.push(
+                            `signal ${item.signal.levelDbm} dBm (quality ${item.signal.quality})`,
+                        );
+
+                    const rates =
+                        item.rxRate === null
+                            ? 'measuring…'
+                            : `↓ ${formatRate(item.rxRate)}  ↑ ${formatRate(item.txRate)}`;
+                    return `${facts.join('  ·  ')}\n  ${rates}`;
+                })
+                .join('\n');
         }
 
         // The value shown inside each pill: how much of the resource is in use.

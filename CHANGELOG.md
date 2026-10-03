@@ -10,6 +10,15 @@ To publish a release, add a section for the new version below, bump
 
 ## [Unreleased]
 
+### Added
+
+- Wi-Fi and Ethernet badges with download and upload speed (bytes per second).
+  Each shows up only when such an interface exists, is teal while the link is
+  up and gray when it is down. Only physical interfaces are counted, so Docker
+  bridges, veth pairs and VPNs do not count the same traffic twice.
+- The menu lists each physical interface with its link state, link speed,
+  Wi-Fi signal and current download and upload speed.
+
 ## [0.2.0] - 2026-10-03
 
 ### Added

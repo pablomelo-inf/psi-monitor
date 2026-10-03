@@ -31,6 +31,12 @@
     color: #ffffff;
 }
 
+/* Network shows speed, not pressure: teal while the link is up, gray when down. */
+.psi-net {
+    background-color: #1a7f8e;
+    color: #ffffff;
+}
+
 .psi-header {
     font-size: 90%;
     font-weight: bold;
