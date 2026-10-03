@@ -8,22 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 To publish a release, add a section for the new version below, bump
 `version-name` in `metadata.json.in`, and push to `main`.
 
+Keep lines under 76 characters: the notes of the version being released are
+copied into the `.deb` changelog, which lintian wants under 80.
+
 ## [Unreleased]
+
+## [0.3.1] - 2026-10-03
 
 ### Changed
 
-- Each badge is now its own button with its own menu, so clicking a badge shows
-  only its details (before, every badge opened one menu with everything).
+- Each badge is now its own button with its own menu, so clicking a badge
+  shows only its details (before, every badge opened one menu with
+  everything).
 
 ### Fixed
 
-- The Ethernet and Wi-Fi badges stayed active after turning the interface off
-  from the desktop's network menu while its cable was still plugged in: the
-  physical link stays up, and the kernel can keep stale IPv6 addresses on it.
-  An interface now counts as connected only when its link is up and it has an
-  IPv4 route, and the badge shows `off` otherwise. The menu says
-  `link up, no IPv4 address` for that case. Networks that are IPv6-only show
-  as `off`.
+- The Ethernet and Wi-Fi badges stayed active after turning the interface
+  off from the desktop's network menu while its cable was still plugged in:
+  the physical link stays up, and the kernel can keep stale IPv6 addresses
+  on it. An interface now counts as connected only when its link is up and
+  it has an IPv4 route, and the badge shows `off` otherwise. The menu says
+  `link up, no IPv4 address` for that case. Networks that are IPv6-only
+  show as `off`.
 
 ## [0.3.0] - 2026-10-03
 
@@ -70,7 +76,8 @@ To publish a release, add a section for the new version below, bump
   generated from `metadata.json.in`.
 - Released under GPL-3.0-or-later.
 
-[Unreleased]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pablomelo-inf/psi-monitor/releases/tag/v0.1.0

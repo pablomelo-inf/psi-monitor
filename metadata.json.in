@@ -3,6 +3,6 @@
   "name": "PSI Monitor",
   "description": "Disk, CPU, memory, GPU and network speed in the top bar, with colors from kernel pressure (PSI).",
   "shell-version": ["46"],
-  "version-name": "0.3.0",
+  "version-name": "0.3.1",
   "url": "https://github.com/pablomelo-inf/psi-monitor"
 }
