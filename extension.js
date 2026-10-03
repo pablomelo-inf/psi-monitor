@@ -9,6 +9,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+import { BADGES, canHide, isShown, sanitizeHidden, setShown } from './lib/badges.js';
 import { GPU_QUERY, formatMiB, parseGpuLine } from './lib/gpu.js';
 import { KINDS, formatRate, isLinkUp, summarize } from './lib/network.js';
 import { RESOURCES, formatPercent, levelFor } from './lib/psi.js';
@@ -20,15 +21,6 @@ const NET_LABEL = { wifi: 'Wi-Fi', ethernet: 'Ethernet' };
 // Color classes a badge can have: pressure levels, and "net" for a connected
 // network interface.
 const STATES = ['ok', 'warn', 'crit', 'net'];
-// Left to right in the top bar. Each one is its own button with its own menu.
-const BADGES = [
-    ['io', 'Disk'],
-    ['cpu', 'CPU'],
-    ['memory', 'Memory'],
-    ['gpu', 'GPU'],
-    ['wifi', 'Wi-Fi'],
-    ['ethernet', 'Ethernet'],
-];
 
 function windows(stats) {
     if (!stats) return 'n/a';
@@ -92,10 +84,11 @@ class GpuMonitor {
 }
 
 // One top-bar badge with its own menu, so clicking a badge shows only that
-// badge's details.
+// badge's details. Right-clicking opens a second, small menu with just the
+// "Show in top bar" options; the same options end the normal menu.
 const Badge = GObject.registerClass(
     class Badge extends PanelMenu.Button {
-        _init(title, extraClass = null) {
+        _init(title, extraClass, onToggle) {
             super._init(0.0, title, false);
             this.add_style_class_name('psi-button');
 
@@ -112,6 +105,41 @@ const Badge = GObject.registerClass(
             this.menu.addMenuItem(this._headingItem);
             this._bodyItem = new PopupMenu.PopupMenuItem('', { reactive: false });
             this.menu.addMenuItem(this._bodyItem);
+
+            this._toggles = []; // { key, item } of both menus
+            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            this._addToggles(this.menu, onToggle);
+
+            // Registered with the panel's menu manager so only one menu is open.
+            this._optionsMenu = new PopupMenu.PopupMenu(this, 0.0, St.Side.TOP);
+            this._optionsMenu.actor.add_style_class_name('panel-menu');
+            Main.uiGroup.add_child(this._optionsMenu.actor);
+            this._optionsMenu.actor.hide();
+            Main.panel.menuManager.addMenu(this._optionsMenu);
+            this._addToggles(this._optionsMenu, onToggle);
+        }
+
+        _addToggles(menu, onToggle) {
+            const header = new PopupMenu.PopupMenuItem('Show in top bar', { reactive: false });
+            header.label.add_style_class_name('psi-header');
+            menu.addMenuItem(header);
+
+            for (const [key, title] of BADGES) {
+                const item = new PopupMenu.PopupMenuItem(title);
+                item.connect('activate', () => onToggle(key));
+                menu.addMenuItem(item);
+                this._toggles.push({ key, item });
+            }
+        }
+
+        // Check marks for both menus, and the rule that the last always
+        // available badge cannot be hidden.
+        setChecks(hidden) {
+            for (const { key, item } of this._toggles) {
+                const shown = isShown(hidden, key);
+                item.setOrnament(shown ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
+                item.setSensitive(shown ? canHide(hidden, key) : true);
+            }
         }
 
         // `state` is one of STATES (the badge color), or null for none.
@@ -121,6 +149,23 @@ const Badge = GObject.registerClass(
             if (state) this._pill.add_style_class_name(`psi-${state}`);
             this._headingItem.label.set_text(heading);
             this._bodyItem.label.set_text(body);
+        }
+
+        vfunc_event(event) {
+            const secondary =
+                event.type() === Clutter.EventType.BUTTON_PRESS &&
+                event.get_button() === Clutter.BUTTON_SECONDARY;
+            if (!secondary) return super.vfunc_event(event);
+
+            this.menu.close();
+            this._optionsMenu.toggle();
+            return Clutter.EVENT_STOP;
+        }
+
+        _onDestroy() {
+            Main.panel.menuManager.removeMenu(this._optionsMenu);
+            this._optionsMenu.destroy();
+            super._onDestroy();
         }
     },
 );
@@ -219,16 +264,27 @@ function describeInterfaces(interfaces) {
 
 export default class PsiMonitorExtension extends Extension {
     enable() {
+        this._settings = this.getSettings();
+        this._hidden = sanitizeHidden(this._settings.get_strv('hidden-badges'));
+        // Whether the hardware behind a badge exists. They stay hidden until
+        // it is known, whatever the setting says.
+        this._present = { gpu: false, wifi: false, ethernet: false };
+
         this._badges = {};
         BADGES.forEach(([key, title], index) => {
-            const badge = new Badge(title, key === 'gpu' ? 'psi-gpu' : null);
+            const badge = new Badge(title, key === 'gpu' ? 'psi-gpu' : null, (k) =>
+                this._toggle(k),
+            );
             // One role per badge. The explicit index keeps them in this order,
             // left to right, ahead of the other items on the right side.
             Main.panel.addToStatusArea(`${this.uuid}-${key}`, badge, index, 'right');
             this._badges[key] = badge;
         });
-        // Shown only once an interface of that kind exists.
-        for (const kind of KINDS) this._badges[kind].visible = false;
+
+        this._settingsId = this._settings.connect('changed::hidden-badges', () => {
+            this._hidden = sanitizeHidden(this._settings.get_strv('hidden-badges'));
+            this._applyHidden();
+        });
 
         this._sampler = new SystemSampler();
         this._refresh();
@@ -237,11 +293,16 @@ export default class PsiMonitorExtension extends Extension {
             return GLib.SOURCE_CONTINUE;
         });
 
-        this._gpu = new GpuMonitor((gpu) => this._showGpu(gpu));
-        this._gpu.start();
+        this._applyHidden();
     }
 
     disable() {
+        if (this._settingsId) {
+            this._settings.disconnect(this._settingsId);
+            this._settingsId = null;
+        }
+        this._settings = null;
+
         this._gpu?.stop();
         this._gpu = null;
 
@@ -252,6 +313,42 @@ export default class PsiMonitorExtension extends Extension {
         this._sampler = null;
         for (const badge of Object.values(this._badges ?? {})) badge.destroy();
         this._badges = null;
+    }
+
+    // Menu click: flip one badge in the stored list. The settings signal then
+    // updates everything, so it also reacts to changes made elsewhere (dconf).
+    _toggle(key) {
+        const next = setShown(this._hidden, key, !isShown(this._hidden, key));
+        const unchanged =
+            next.length === this._hidden.length && next.every((k) => this._hidden.includes(k));
+        if (!unchanged) this._settings.set_strv('hidden-badges', next);
+    }
+
+    _applyHidden() {
+        for (const [key] of BADGES) {
+            this._badges[key].setChecks(this._hidden);
+            this._updateVisibility(key);
+        }
+        this._syncGpu();
+    }
+
+    _updateVisibility(key) {
+        const present = key in this._present ? this._present[key] : true;
+        this._badges[key].visible = isShown(this._hidden, key) && present;
+    }
+
+    // nvidia-smi only runs while the GPU badge is shown.
+    _syncGpu() {
+        const wanted = isShown(this._hidden, 'gpu');
+        if (wanted && !this._gpu) {
+            this._gpu = new GpuMonitor((gpu) => this._showGpu(gpu));
+            this._gpu.start();
+        } else if (!wanted && this._gpu) {
+            this._gpu.stop();
+            this._gpu = null;
+            this._present.gpu = false;
+            this._updateVisibility('gpu');
+        }
     }
 
     _refresh() {
@@ -275,8 +372,8 @@ export default class PsiMonitorExtension extends Extension {
         // while the interface is connected and gray ("off") otherwise.
         for (const kind of KINDS) {
             const group = snapshot.net.filter((item) => item.kind === kind);
-            const badge = this._badges[kind];
-            badge.visible = group.length > 0;
+            this._present[kind] = group.length > 0;
+            this._updateVisibility(kind);
             if (group.length === 0) continue;
 
             const label = NET_LABEL[kind];
@@ -286,7 +383,7 @@ export default class PsiMonitorExtension extends Extension {
             else if (rxRate === null) text = `${label}: …`;
             else text = `${label} ↓ ${formatRate(rxRate)} ↑ ${formatRate(txRate)}`;
 
-            badge.setContent({
+            this._badges[kind].setContent({
                 text,
                 state: up ? 'net' : null,
                 heading: `${label}  ·  number = download and upload speed`,
@@ -295,15 +392,19 @@ export default class PsiMonitorExtension extends Extension {
         }
     }
 
+    // gpu is null when nvidia-smi is not installed: the badge then stays hidden.
     _showGpu(gpu) {
-        // The nvidia-smi callback can fire after disable().
-        if (!this._badges) return;
+        // The nvidia-smi callback can fire after disable() or after hiding.
+        if (!this._badges || !this._gpu) return;
+
+        this._present.gpu = gpu !== null;
+        this._updateVisibility('gpu');
+        if (!gpu) return;
+
         this._badges.gpu.setContent({
-            text: gpu ? `GPU: ${Math.round(gpu.util)}%` : 'GPU: n/a',
+            text: `GPU: ${Math.round(gpu.util)}%`,
             heading: 'GPU  ·  current usage, not pressure',
-            body: gpu
-                ? `Usage ${Math.round(gpu.util)}%  ·  VRAM ${formatMiB(gpu.memUsedMiB)} / ${formatMiB(gpu.memTotalMiB)}  ·  ${Math.round(gpu.tempC)}°C`
-                : 'nvidia-smi unavailable',
+            body: `Usage ${Math.round(gpu.util)}%  ·  VRAM ${formatMiB(gpu.memUsedMiB)} / ${formatMiB(gpu.memTotalMiB)}  ·  ${Math.round(gpu.tempC)}°C`,
         });
     }
 }

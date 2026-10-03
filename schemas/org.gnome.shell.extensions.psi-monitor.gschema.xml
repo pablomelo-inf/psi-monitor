@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.psi-monitor" path="/org/gnome/shell/extensions/psi-monitor/">
+    <key name="hidden-badges" type="as">
+      <default>[]</default>
+      <summary>Hidden badges</summary>
+      <description>Badges that are not shown in the top bar. Valid values: io, cpu, memory, gpu, wifi, ethernet. The list holds the hidden ones, so a badge added in a later version is shown by default.</description>
+    </key>
+  </schema>
+</schemalist>

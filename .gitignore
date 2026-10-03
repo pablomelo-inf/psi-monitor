@@ -5,6 +5,7 @@ node_modules/
 # Personal settings and generated files
 config.mk
 metadata.json
+schemas/gschemas.compiled
 release-notes.md
 
 # Personal notes and drafts (not published)

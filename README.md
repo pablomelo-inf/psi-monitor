@@ -67,6 +67,9 @@ This extension shows both: usage as the number, PSI as the color.
     interface.
 - Few moving parts: a handful of tiny `/proc` reads every 2 s, plus one
   long-running `nvidia-smi` process read asynchronously.
+- **Choose which badges to show**: tick them in the "Show in top bar" list at the end of any badge menu,
+  or right-click a badge to open just that list. Your choice is remembered. Hiding the GPU badge
+  also stops the `nvidia-smi` process.
 - Everything created in `enable()` is released in `disable()`.
 
 ## Reading the badges
@@ -109,15 +112,16 @@ Notes:
 
 ## Requirements
 
-| Needed for                 | Requirement                                                                                              |
-| -------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Running                    | GNOME Shell **46** (Ubuntu 24.04) and a Linux kernel with PSI (`/proc/pressure/` exists)                 |
-| Installing from source     | `git` and `make`                                                                                         |
-| GPU badge (optional)       | NVIDIA driver providing `nvidia-smi`. Without it the badge shows `GPU: n/a`                              |
-| `make check` / `make test` | Node.js (tested with 22 and 23.10) and Python 3 (JSON check)                                             |
-| `make setup` / `make lint` | Node.js 22 LTS (pinned in `.nvmrc`) and [pre-commit](https://pre-commit.com) (`pipx install pre-commit`) |
-| `make pack`                | `zip`                                                                                                    |
-| `make deb`                 | `dpkg-deb` (Debian, Ubuntu and derivatives)                                                              |
+| Needed for                                | Requirement                                                                                              |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Running                                   | GNOME Shell **46** (Ubuntu 24.04) and a Linux kernel with PSI (`/proc/pressure/` exists)                 |
+| Installing from source                    | `git` and `make`                                                                                         |
+| GPU badge (optional)                      | NVIDIA driver providing `nvidia-smi`. Without it the badge shows `GPU: n/a`                              |
+| `make check` / `make test`                | Node.js (tested with 22 and 23.10) and Python 3 (JSON check)                                             |
+| `make setup` / `make lint`                | Node.js 22 LTS (pinned in `.nvmrc`) and [pre-commit](https://pre-commit.com) (`pipx install pre-commit`) |
+| `make install` / `check` / `pack` / `deb` | `glib-compile-schemas` (package `libglib2.0-bin`)                                                        |
+| `make pack`                               | `zip`                                                                                                    |
+| `make deb`                                | `dpkg-deb` (Debian, Ubuntu and derivatives)                                                              |
 
 Tested on Ubuntu 24.04.2, GNOME Shell 46.0 (X11), NVIDIA RTX 3060.
 Run `make doctor` to check your machine.
@@ -301,9 +305,10 @@ does:
   `speed` and `statistics/{rx,tx}_bytes`.
 - **Runs** `nvidia-smi` with a read-only query (utilization, memory,
   temperature). Nothing is run if it is not installed.
-- **Does not** send, capture or inspect network traffic (it only reads the
-  byte counters the kernel already keeps), open connections, write files, or
-  need root.
+- **Stores one setting**, the list of hidden badges, in GSettings (dconf), the standard place for
+  extension settings.
+- **Does not** send, capture or inspect network traffic (it only reads the byte counters the kernel
+  already keeps), open connections, write files, or need root.
 
 ## Performance
 
@@ -354,10 +359,12 @@ psi-monitor/
 │   ├── psi.js           PSI parser, severity levels, instant % from counters
 │   ├── system.js        parsers: meminfo, cpu stat, diskstats, mounts
 │   ├── gpu.js           nvidia-smi line parser
+│   ├── badges.js        which badges are shown (pure logic, unit-tested)
 │   └── sampler.js       reads /proc and turns samples into rates (GLib only)
 ├── test/                unit tests (Node)
 ├── bin/psi-monitor      wrapper: runs this project's make targets from anywhere
 ├── docs/screenshot.png  image used in this README
+├── schemas/             GSettings schema that stores which badges are hidden
 ├── packaging/deb/       templates for the .deb control and copyright files
 ├── scripts/release-notes.sh  extracts one version's notes from CHANGELOG.md
 ├── .github/workflows/ci.yml  CI (tests, lint, Trivy scan) and automatic releases
@@ -489,17 +496,18 @@ modules under `lib/` and add a test for it.
 
 ## Troubleshooting
 
-| Symptom                                                                                   | Likely cause and fix                                                                                                            |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `make enable` says the extension "does not exist"                                         | GNOME has not discovered it yet. Restart the shell (X11: `Alt+F2`, `r`, `Enter`), then enable again.                            |
-| Badges missing after enabling                                                             | `make status` should show `ACTIVE`. If it shows `ERROR`, run `make logs` and look for `psi-monitor` or `JS ERROR`.              |
-| Badges show `…`                                                                           | Normal for about 2 s: rates need two samples.                                                                                   |
-| `GPU: n/a`                                                                                | `nvidia-smi` is missing or not in `PATH`, or the GPU is not NVIDIA.                                                             |
-| Usage looks wrong                                                                         | Compare with `top` and `nvidia-smi`. If they disagree, open an issue with the `make doctor` output.                             |
-| Colored badges are always green                                                           | Normal: PSI is 0 when nothing is stalling. See below to force some load.                                                        |
-| `pre-commit: command not found`, or the hook says `npx` cannot find `prettier` / `eslint` | Install pre-commit with `pipx install pre-commit`, and the tools with `make setup` (it runs `npm ci`). Use Node 22 (`nvm use`). |
-| `psi-monitor: command not found`                                                          | `~/.local/bin` is not in `PATH`. See [Usage](#usage).                                                                           |
-| `gnome-extensions pack` crashes                                                           | It segfaults on some systems. Use `make pack`, which uses plain `zip`.                                                          |
+| Symptom                                                                                   | Likely cause and fix                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make enable` says the extension "does not exist"                                         | GNOME has not discovered it yet. Restart the shell (X11: `Alt+F2`, `r`, `Enter`), then enable again.                                                                                                                       |
+| Badges missing after enabling                                                             | `make status` should show `ACTIVE`. If it shows `ERROR`, run `make logs` and look for `psi-monitor` or `JS ERROR`.                                                                                                         |
+| Badges show `…`                                                                           | Normal for about 2 s: rates need two samples.                                                                                                                                                                              |
+| `GPU: n/a`                                                                                | `nvidia-smi` is missing or not in `PATH`, or the GPU is not NVIDIA.                                                                                                                                                        |
+| Usage looks wrong                                                                         | Compare with `top` and `nvidia-smi`. If they disagree, open an issue with the `make doctor` output.                                                                                                                        |
+| Colored badges are always green                                                           | Normal: PSI is 0 when nothing is stalling. See below to force some load.                                                                                                                                                   |
+| `pre-commit: command not found`, or the hook says `npx` cannot find `prettier` / `eslint` | Install pre-commit with `pipx install pre-commit`, and the tools with `make setup` (it runs `npm ci`). Use Node 22 (`nvm use`).                                                                                            |
+| A badge disappeared and you want it back                                                  | Right-click any badge and tick it again. To reset them all: `gsettings reset org.gnome.shell.extensions.psi-monitor hidden-badges` (add `--schemadir <extension folder>/schemas` if `gsettings` does not find the schema). |
+| `psi-monitor: command not found`                                                          | `~/.local/bin` is not in `PATH`. See [Usage](#usage).                                                                                                                                                                      |
+| `gnome-extensions pack` crashes                                                           | It segfaults on some systems. Use `make pack`, which uses plain `zip`.                                                                                                                                                     |
 
 To see PSI move, create load on purpose. For CPU:
 

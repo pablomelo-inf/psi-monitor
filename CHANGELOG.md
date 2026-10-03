@@ -13,6 +13,21 @@ copied into the `.deb` changelog, which lintian wants under 80.
 
 ## [Unreleased]
 
+### Added
+
+- Choose which badges to show: a "Show in top bar" list with a check mark per
+  badge ends every badge menu, and right-clicking a badge opens a menu with
+  just that list. The choice is stored in GSettings, in the new
+  `org.gnome.shell.extensions.psi-monitor` schema (key `hidden-badges`). At
+  least one of Disk, CPU and Memory always stays visible, so the options can
+  always be reached.
+- `nvidia-smi` only runs while the GPU badge is shown.
+
+### Changed
+
+- The GPU badge stays hidden when `nvidia-smi` is not installed, instead of
+  showing `GPU: n/a`.
+
 ## [0.3.1] - 2026-10-03
 
 ### Changed

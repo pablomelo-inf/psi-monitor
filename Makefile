@@ -18,10 +18,10 @@ DEB_ROOT       := dist/deb-root
 EXT_DIR   := $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
 BIN_DIR   := $(HOME)/.local/bin
 CLI       := psi-monitor
-SRC_FILES := extension.js metadata.json stylesheet.css lib
+SRC_FILES := extension.js metadata.json stylesheet.css lib schemas
 JS_FILES  := extension.js $(wildcard lib/*.js) $(wildcard test/*.js)
 
-.PHONY: help config setup hooks lint format version metadata.json install uninstall link \
+.PHONY: help config setup hooks lint format version metadata.json schemas install uninstall link \
         unlink enable disable status reload logs doctor check test pack deb clean
 
 help: ## Show this help
@@ -51,10 +51,16 @@ version: ## Print the extension version
 
 # Generated from metadata.json.in so the personal UUID suffix never lives in git.
 # Phony on purpose: always rebuilt, so `make HANDLE=x ...` is honoured too.
+# The shell loads the settings schema from its compiled form, so it ships with
+# the extension. --strict also validates the XML.
+schemas:
+	@command -v glib-compile-schemas >/dev/null || { echo "glib-compile-schemas not found: sudo apt install libglib2.0-bin"; exit 1; }
+	@glib-compile-schemas --strict schemas
+
 metadata.json:
 	@sed 's|__UUID__|$(UUID)|' metadata.json.in > $@
 
-install: link metadata.json ## Copy the extension to GNOME and link the CLI
+install: link metadata.json schemas ## Copy the extension to GNOME and link the CLI
 	@rm -rf "$(EXT_DIR)"
 	@mkdir -p "$(EXT_DIR)"
 	@cp -r $(SRC_FILES) "$(EXT_DIR)/"
@@ -103,7 +109,7 @@ doctor: ## Check the environment
 	@if [ -f config.mk ]; then echo "Config:  config.mk (HANDLE=$(HANDLE), UUID=$(UUID))"; \
 	else echo "Config:  none, using HANDLE=$(HANDLE) (run 'make config')"; fi
 
-check: metadata.json ## Validate metadata.json and JS syntax
+check: metadata.json schemas ## Validate metadata.json and JS syntax
 	@python3 -m json.tool metadata.json >/dev/null && echo "metadata.json OK"
 	@for f in $(JS_FILES); do node --check "$$f" || exit 1; done && echo "JS syntax OK"
 
@@ -145,4 +151,4 @@ deb: check ## Build a .deb package in dist/ (Debian/Ubuntu)
 	@echo "Built $(DEB_FILE)"
 
 clean: ## Remove build output
-	@rm -rf dist
+	@rm -rf dist schemas/gschemas.compiled
