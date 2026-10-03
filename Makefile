@@ -12,7 +12,7 @@ CLI       := psi-monitor
 SRC_FILES := extension.js metadata.json stylesheet.css lib
 JS_FILES  := extension.js $(wildcard lib/*.js) $(wildcard test/*.js)
 
-.PHONY: help config metadata.json install uninstall link unlink enable \
+.PHONY: help config version metadata.json install uninstall link unlink enable \
         disable status reload logs doctor check test pack clean
 
 help: ## Show this help
@@ -21,6 +21,9 @@ help: ## Show this help
 config: ## Create config.mk from config.example.mk (if missing)
 	@if [ -e config.mk ]; then echo "config.mk already exists"; \
 	else cp config.example.mk config.mk && echo "Created config.mk: edit it with your values"; fi
+
+version: ## Print the extension version
+	@sed -n 's/.*"version-name": *"\([^"]*\)".*/\1/p' metadata.json.in
 
 # Generated from metadata.json.in so the personal UUID suffix never lives in git.
 # Phony on purpose: always rebuilt, so `make HANDLE=x ...` is honoured too.
@@ -82,7 +85,7 @@ ZIP := dist/$(UUID).shell-extension.zip
 pack: check ## Build the release zip in dist/ (plain zip, no gjs needed)
 	@command -v zip >/dev/null || { echo "zip not found: sudo apt install zip"; exit 1; }
 	@mkdir -p dist
-	@rm -f "$(ZIP)"
+	@rm -f dist/*.shell-extension.zip   # no stale zips from another HANDLE
 	@zip -qr "$(ZIP)" $(SRC_FILES)
 	@echo "Built $(ZIP)"
 	@unzip -l "$(ZIP)" | tail -n +4 | head -n -2

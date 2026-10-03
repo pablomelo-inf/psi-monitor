@@ -130,11 +130,18 @@ Then enable it:
 make enable
 ```
 
-### From a zip
+### From a release zip
 
-Build one with `make pack` (it creates
-`dist/psi-monitor@<HANDLE>.shell-extension.zip`), or use one you were given.
-Replace `<HANDLE>` with the suffix in the file name.
+Download `psi-monitor@<HANDLE>.shell-extension.zip` from the
+[Releases](https://github.com/pablomelo-inf/psi-monitor/releases) page. Use
+that file, **not** the automatic "Source code" archives: those lack the
+generated `metadata.json` and cannot be installed as an extension. Replace
+`<HANDLE>` with the suffix in the file name.
+
+Each release also ships a `SHA256SUMS` file. To verify the download, run
+`sha256sum -c SHA256SUMS` in the folder with both files.
+
+You can also build the zip yourself with `make pack`.
 
 ```bash
 gnome-extensions install --force psi-monitor@<HANDLE>.shell-extension.zip
@@ -236,6 +243,9 @@ psi-monitor/
 ├── test/                unit tests (Node)
 ├── bin/psi-monitor      wrapper: runs this project's make targets from anywhere
 ├── docs/screenshot.png  image used in this README
+├── scripts/release-notes.sh  extracts one version's notes from CHANGELOG.md
+├── .github/workflows/ci.yml  CI (check + tests) and automatic releases
+├── CHANGELOG.md         release notes, one section per version
 ├── config.example.mk    template for your personal, gitignored config.mk
 ├── Makefile             entry point for every task
 ├── package.json         dev-only: makes Node treat .js as ES modules
@@ -267,6 +277,7 @@ Run `make` with no arguments for the live list.
 | `status`    | show the state GNOME reports for the extension |
 | `reload`    | print how to restart GNOME Shell on X11 (it does not do it) |
 | `logs`      | follow GNOME Shell logs |
+| `version`   | print the extension version (from `metadata.json.in`) |
 | `doctor`    | check shell version, session, Node, PSI and config |
 | `check`     | validate `metadata.json` and the JS syntax |
 | `test`      | run the unit tests |
@@ -282,6 +293,27 @@ make logs                     # in another terminal, if something looks wrong
 ```
 
 `make test` ends with a summary; success is `fail 0`.
+
+### Releases
+
+Pushing to `main` runs `.github/workflows/ci.yml`. It always runs `make check`
+and `make test`, and it publishes a GitHub release **only when the version has
+no release yet**. A push that does not bump the version just runs the tests.
+
+To cut a release:
+
+1. Bump `version-name` in `metadata.json.in` (semantic versioning).
+2. In `CHANGELOG.md`, move the notes from `## [Unreleased]` into a new
+   `## [X.Y.Z] - YYYY-MM-DD` section.
+3. Commit and push to `main`.
+
+The workflow then tags `vX.Y.Z`, builds
+`psi-monitor@<owner>.shell-extension.zip` plus a `SHA256SUMS` file (`<owner>` is
+the repository owner, used as the UUID suffix), and publishes the release with
+that version's `CHANGELOG.md` section as its notes. If the section is missing
+or empty the job fails instead of publishing a release without notes.
+
+To preview the notes locally: `scripts/release-notes.sh X.Y.Z`.
 
 ### Contributing
 

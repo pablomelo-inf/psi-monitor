@@ -1,0 +1,83 @@
+name: CI and release
+
+# Every push to main (and every pull request) runs the checks and tests.
+# A push to main also publishes a GitHub release, but only when the version
+# in metadata.json.in has no release yet. See "Releases" in the README.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check metadata and JS syntax
+        run: make check
+      - name: Run unit tests
+        run: make test
+
+  release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      # The UUID suffix is the repository owner, so the zip never depends on
+      # anyone's local config.mk.
+      HANDLE: ${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decide whether a release is needed
+        id: version
+        run: |
+          version="$(make -s version)"
+          tag="v${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists. Bump version-name to publish a new one."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract the changelog notes
+        if: steps.version.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash scripts/release-notes.sh "${VERSION}" > release-notes.md
+
+      - name: Build the extension zip
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          make pack HANDLE="${HANDLE}"
+          cd dist
+          sha256sum "psi-monitor@${HANDLE}.shell-extension.zip" > SHA256SUMS
+
+      - name: Publish the release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "${TAG}" \
+            "dist/psi-monitor@${HANDLE}.shell-extension.zip" \
+            dist/SHA256SUMS \
+            --title "${TAG}" \
+            --notes-file release-notes.md \
+            --target "${GITHUB_SHA}"

@@ -5,3 +5,4 @@ node_modules/
 # Personal settings and generated files
 config.mk
 metadata.json
+release-notes.md
