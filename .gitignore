@@ -6,3 +6,6 @@ node_modules/
 config.mk
 metadata.json
 release-notes.md
+
+# Personal notes and drafts (not published)
+todo/
