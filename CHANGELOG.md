@@ -10,6 +10,8 @@ To publish a release, add a section for the new version below, bump
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-03
+
 ### Added
 
 - Wi-Fi and Ethernet badges with download and upload speed (bytes per second).
@@ -18,6 +20,8 @@ To publish a release, add a section for the new version below, bump
   bridges, veth pairs and VPNs do not count the same traffic twice.
 - The menu lists each physical interface with its link state, link speed,
   Wi-Fi signal and current download and upload speed.
+- `url` in `metadata.json`, pointing to the repository (recommended by
+  extensions.gnome.org).
 
 ## [0.2.0] - 2026-10-03
 
@@ -51,6 +55,7 @@ To publish a release, add a section for the new version below, bump
   generated from `metadata.json.in`.
 - Released under GPL-3.0-or-later.
 
-[Unreleased]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pablomelo-inf/psi-monitor/releases/tag/v0.1.0
