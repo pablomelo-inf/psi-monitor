@@ -36,6 +36,7 @@ The badges appear on the right side of the top bar. Details in
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Privacy and permissions](#privacy-and-permissions)
+- [Performance](#performance)
 - [Development](#development)
 - [Troubleshooting](#troubleshooting)
 - [Limitations](#limitations)
@@ -289,6 +290,42 @@ does:
 - **Runs** `nvidia-smi` with a read-only query (utilization, memory,
   temperature). Nothing is run if it is not installed.
 - **Does not** use the network, write files, or need root.
+
+## Performance
+
+The extension is written in JavaScript, which GNOME Shell runs through GJS (the
+SpiderMonkey engine, with a JIT compiler). The work is tiny: a few small reads
+of `/proc` every 2 seconds and some arithmetic. The cost is in the system
+calls, not in the language, so the language is not a factor here.
+
+Measured on one machine (Ubuntu 24.04, GNOME Shell 46 on X11, 16 cores, two
+SSDs, one NVIDIA GPU):
+
+| What                                                                | Result                                |
+| ------------------------------------------------------------------- | ------------------------------------- |
+| One full sample (PSI, CPU, memory, per-disk counters, mount points) | about 0.4 ms                          |
+| That sample, taken every 2 s                                        | about 0.02% of one core               |
+| The long-running `nvidia-smi` process, over a 20 s window           | about 0.05% of one core, about 21 MiB |
+| For scale: the whole `gnome-shell` process, same 20 s window        | about 3.7% of one core                |
+
+How it was measured: the sampler was called 5000 times under `gjs`, with the
+`gjs` start-up time subtracted. Process CPU came from `/proc/<pid>/stat` over 20
+seconds. Your numbers will differ with the number of disks and the CPU.
+
+Why it stays cheap:
+
+- **The shell never waits on a slow call.** GNOME Shell draws the whole desktop
+  from one thread, so a slow call there freezes everything. The only
+  synchronous work is reading small files from `/proc` and `/sys` (served from
+  memory, well under 1 ms in total).
+  `nvidia-smi`, which can take tens of milliseconds, is a separate process read
+  asynchronously.
+- **Nothing is left behind.** Every timer and widget created in `enable()` is
+  released in `disable()`.
+
+Not measured: the cost of redrawing the badges, and memory growth over many
+hours. To check on your machine, compare `gnome-shell` CPU with the extension
+enabled and disabled, and watch its memory over a long session.
 
 ## Development
 
