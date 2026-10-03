@@ -15,7 +15,7 @@ import {SystemSampler} from './lib/sampler.js';
 
 const REFRESH_SECONDS = 2;
 const LEVELS = ['ok', 'warn', 'crit'];
-const SHORT = {io: 'Disco', cpu: 'CPU', memory: 'Memória'};
+const SHORT = {io: 'Disk', cpu: 'CPU', memory: 'Memory'};
 
 function windows(stats) {
     if (!stats)
@@ -93,7 +93,7 @@ class PsiIndicator extends PanelMenu.Button {
         this._gpuPill.add_style_class_name('psi-gpu');
         this.add_child(this._box);
 
-        this._addHeader('% do tempo parado esperando  (10s  ·  60s  ·  5min)');
+        this._addHeader('% of time stalled waiting  (10s  ·  60s  ·  5min)');
         this._rows = {};
         for (const resource of RESOURCES) {
             this._rows[resource] = new PopupMenu.PopupMenuItem('', {reactive: false});
@@ -101,12 +101,12 @@ class PsiIndicator extends PanelMenu.Button {
         }
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        this._addHeader('Discos  (ocupação e velocidade, por disco)');
+        this._addHeader('Disks  (busy % and speed, per disk)');
         this._disksRow = new PopupMenu.PopupMenuItem('', {reactive: false});
         this.menu.addMenuItem(this._disksRow);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        this._addHeader('GPU  (uso atual, não é pressão)');
+        this._addHeader('GPU  (current usage, not pressure)');
         this._gpuRow = new PopupMenu.PopupMenuItem('', {reactive: false});
         this.menu.addMenuItem(this._gpuRow);
     }
@@ -157,9 +157,9 @@ class PsiIndicator extends PanelMenu.Button {
         const {psi, instant, cores, cpuUsage, mem, disks} = snapshot;
         const data = psi[resource];
         const titles = {
-            io: 'Disco (I/O)  ·  número = disco mais ocupado',
-            cpu: `CPU  ·  número = uso, ${cores} núcleos`,
-            memory: 'Memória  ·  número = RAM em uso',
+            io: 'Disk (I/O)  ·  number = busiest disk',
+            cpu: `CPU  ·  number = usage, ${cores} cores`,
+            memory: 'Memory  ·  number = RAM in use',
         };
         if (!data)
             return `${titles[resource]}: n/a`;
@@ -167,51 +167,51 @@ class PsiIndicator extends PanelMenu.Button {
         const now = instant[resource];
         const lines = [
             titles[resource],
-            '  cor = pressão (tempo parado esperando):',
+            '  color = pressure (time stalled waiting):',
             `  some  ${windows(data.some)}`,
             `  full   ${windows(data.full)}`,
-            `  agora (${REFRESH_SECONDS}s): ${now === null ? 'medindo…' : formatPercent(now, 3)}`,
+            `  now (${REFRESH_SECONDS}s): ${now === null ? 'measuring…' : formatPercent(now, 3)}`,
         ];
 
         if (resource === 'io') {
             const busiest = disks.filter(d => d.rates).sort((a, b) => b.rates.busyPercent - a.rates.busyPercent)[0];
             if (busiest)
-                lines.push(`  mais ocupado: ${busiest.name} (${formatPercent(busiest.rates.busyPercent, 1)})`);
+                lines.push(`  busiest: ${busiest.name} (${formatPercent(busiest.rates.busyPercent, 1)})`);
         }
 
         if (resource === 'cpu' && cpuUsage !== null)
-            lines.push(`  uso: ${formatPercent(cpuUsage, 1)} de ${cores} núcleos`);
+            lines.push(`  usage: ${formatPercent(cpuUsage, 1)} of ${cores} cores`);
 
         if (resource === 'memory' && mem) {
             const usedPercent = (100 * mem.usedMiB) / mem.totalMiB;
-            lines.push(`  RAM em uso: ${formatMiB(mem.usedMiB)} de ${formatMiB(mem.totalMiB)} (${formatPercent(usedPercent, 0)})`);
-            lines.push(`  swap: ${formatMiB(mem.swapUsedMiB)} de ${formatMiB(mem.swapTotalMiB)}`);
+            lines.push(`  RAM in use: ${formatMiB(mem.usedMiB)} of ${formatMiB(mem.totalMiB)} (${formatPercent(usedPercent, 0)})`);
+            lines.push(`  swap: ${formatMiB(mem.swapUsedMiB)} of ${formatMiB(mem.swapTotalMiB)}`);
         }
         return lines.join('\n');
     }
 
     _describeDisks(disks) {
         if (disks.length === 0)
-            return 'nenhum disco encontrado';
+            return 'no disks found';
 
         return disks.map(disk => {
-            const where = disk.mounts.length > 0 ? disk.mounts.join(', ') : 'não montado';
+            const where = disk.mounts.length > 0 ? disk.mounts.join(', ') : 'not mounted';
             const speed = disk.rates
-                ? `ocupado ${formatPercent(disk.rates.busyPercent, 1)}  ·  lê ${disk.rates.readMBs.toFixed(1)} MB/s  ·  escreve ${disk.rates.writeMBs.toFixed(1)} MB/s`
-                : 'medindo…';
-            return `${disk.name}  ·  ${disk.model}  ·  ${disk.sizeGiB} GiB\n  montado em: ${where}\n  ${speed}`;
+                ? `busy ${formatPercent(disk.rates.busyPercent, 1)}  ·  reads ${disk.rates.readMBs.toFixed(1)} MB/s  ·  writes ${disk.rates.writeMBs.toFixed(1)} MB/s`
+                : 'measuring…';
+            return `${disk.name}  ·  ${disk.model}  ·  ${disk.sizeGiB} GiB\n  mounted on: ${where}\n  ${speed}`;
         }).join('\n');
     }
 
     updateGpu(gpu) {
         if (!gpu) {
             this._gpuPill.set_text('GPU: n/a');
-            this._gpuRow.label.set_text('nvidia-smi indisponível');
+            this._gpuRow.label.set_text('nvidia-smi unavailable');
             return;
         }
         this._gpuPill.set_text(`GPU: ${Math.round(gpu.util)}%`);
         this._gpuRow.label.set_text(
-            `Uso ${Math.round(gpu.util)}%  ·  VRAM ${formatMiB(gpu.memUsedMiB)} / ${formatMiB(gpu.memTotalMiB)}  ·  ${Math.round(gpu.tempC)}°C`);
+            `Usage ${Math.round(gpu.util)}%  ·  VRAM ${formatMiB(gpu.memUsedMiB)} / ${formatMiB(gpu.memTotalMiB)}  ·  ${Math.round(gpu.tempC)}°C`);
     }
 
     _setLevel(pill, level) {

@@ -55,7 +55,7 @@ This extension shows both: usage as the number, PSI as the color.
 - Badge color from kernel pressure: green, yellow or red.
 - A menu, opened by clicking the badges, with what they cannot fit:
   - PSI `some` / `full` over 10 s, 60 s and 5 min windows;
-  - an "agora (2s)" value with 3 decimals, computed from the kernel's
+  - a "now (2s)" value with 3 decimals, computed from the kernel's
     cumulative counter (finer than the 2 decimals in `avg10`);
   - **per-disk** busy %, read/write MB/s and mount points;
   - CPU core count and real usage;
@@ -72,9 +72,9 @@ the last 10 s in which at least one task was stalled.
 
 | Badge   | Number                       | Color comes from                |
 |---------|------------------------------|---------------------------------|
-| Disco   | busy % of the busiest disk   | `/proc/pressure/io` (all disks) |
+| Disk    | busy % of the busiest disk   | `/proc/pressure/io` (all disks) |
 | CPU     | usage % across all cores     | `/proc/pressure/cpu`            |
-| Memória | RAM in use %                 | `/proc/pressure/memory`         |
+| Memory  | RAM in use %                 | `/proc/pressure/memory`         |
 | GPU     | GPU usage % (`nvidia-smi`)   | fixed blue (usage only)         |
 
 | Color  | Time stalled (`avg10`) | Meaning                          |
@@ -86,7 +86,7 @@ the last 10 s in which at least one task was stalled.
 Examples:
 
 - `CPU: 90%` in **green**: busy but healthy, nobody is waiting for a core.
-- `Disco: 8%` in **red**: little disk traffic, yet tasks are stalling on I/O.
+- `Disk: 8%` in **red**: little disk traffic, yet tasks are stalling on I/O.
 
 Notes:
 
@@ -317,8 +317,7 @@ Each loop ends on its own after 20 s.
 - Declares support for GNOME Shell **46** only. Other versions are untested.
 - Tested on **X11 only**. Wayland is expected to work but has not been tested.
 - GPU support is NVIDIA-only (through `nvidia-smi`).
-- Badge labels are in Portuguese (`Disco`, `Memória`). There is no
-  translation support yet.
+- The interface text is English only. There is no translation support.
 - PSI cannot attribute pressure to a specific disk or core.
 - Needs a kernel with PSI enabled (`CONFIG_PSI`, and not turned off with
   `psi=0`).
