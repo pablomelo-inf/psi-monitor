@@ -4,6 +4,6 @@
   "description": "Disk, CPU, memory, GPU and network speed in the top bar, with colors from kernel pressure (PSI).",
   "shell-version": ["46"],
   "settings-schema": "org.gnome.shell.extensions.psi-monitor",
-  "version-name": "0.3.1",
+  "version-name": "0.4.0",
   "url": "https://github.com/pablomelo-inf/psi-monitor"
 }

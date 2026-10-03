@@ -16,6 +16,7 @@ import { RESOURCES, formatPercent, levelFor } from './lib/psi.js';
 import { SystemSampler } from './lib/sampler.js';
 
 const REFRESH_SECONDS = 2;
+const SYSTEM_NVIDIA_SMI = '/usr/bin/nvidia-smi';
 const TITLES = { io: 'Disk', cpu: 'CPU', memory: 'Memory' };
 const NET_LABEL = { wifi: 'Wi-Fi', ethernet: 'Ethernet' };
 // Color classes a badge can have: pressure levels, and "net" for a connected
@@ -36,10 +37,15 @@ class GpuMonitor {
 
     start() {
         this._cancellable = new Gio.Cancellable();
+        // The session PATH can list user-writable folders (such as
+        // ~/.local/bin) before /usr/bin, so use the system binary when it exists.
+        const nvidiaSmi = GLib.file_test(SYSTEM_NVIDIA_SMI, GLib.FileTest.IS_EXECUTABLE)
+            ? SYSTEM_NVIDIA_SMI
+            : 'nvidia-smi';
         try {
             this._proc = Gio.Subprocess.new(
                 [
-                    'nvidia-smi',
+                    nvidiaSmi,
                     `--query-gpu=${GPU_QUERY}`,
                     '--format=csv,noheader,nounits',
                     '-l',

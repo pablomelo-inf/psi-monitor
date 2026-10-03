@@ -262,10 +262,10 @@ make config       # copies config.example.mk to config.mk (never overwrites)
 $EDITOR config.mk
 ```
 
-| Variable         | Purpose                                                                                                                                   |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `HANDLE`         | Suffix of the extension UUID: `psi-monitor@<HANDLE>`. Defaults to `local` without a `config.mk`. Use letters, digits and dashes.          |
-| `DEB_MAINTAINER` | Optional. `Maintainer` field of the `.deb`, which is public inside the package. Defaults to `<HANDLE> <HANDLE@users.noreply.github.com>`. |
+| Variable         | Purpose                                                                                                                                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HANDLE`         | Suffix of the extension UUID: `psi-monitor@<HANDLE>`. Defaults to `local` without a `config.mk`. Only letters, digits, dot, underscore and dash are accepted; anything else makes `make` stop. |
+| `DEB_MAINTAINER` | Optional. `Maintainer` field of the `.deb`, which is public inside the package. Defaults to `<HANDLE> <HANDLE@users.noreply.github.com>`.                                                      |
 
 Things to know:
 
@@ -304,7 +304,9 @@ does:
   physical network interface it reads `/sys/class/net/<name>/operstate`,
   `speed` and `statistics/{rx,tx}_bytes`.
 - **Runs** `nvidia-smi` with a read-only query (utilization, memory,
-  temperature). Nothing is run if it is not installed.
+  temperature), with fixed arguments and no shell. It uses `/usr/bin/nvidia-smi` when it
+  exists, otherwise the one on `PATH`. Nothing is run if it is not installed, or while the GPU
+  badge is hidden.
 - **Stores one setting**, the list of hidden badges, in GSettings (dconf), the standard place for
   extension settings.
 - **Does not** send, capture or inspect network traffic (it only reads the byte counters the kernel
@@ -379,6 +381,7 @@ psi-monitor/
 ├── eslint.config.js     lint rules
 ├── .nvmrc               Node version for the dev tools (22)
 ├── LICENSE
+├── SECURITY.md          how to report a vulnerability, and what the extension does
 ├── .editorconfig
 └── .gitignore
 ```

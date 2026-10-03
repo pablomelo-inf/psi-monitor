@@ -5,6 +5,17 @@ SHELL := /bin/bash
 -include config.mk
 HANDLE    ?= local
 
+# HANDLE ends up in shell commands and in the folder `make uninstall` removes
+# with rm -rf, so accept only plain characters (no slash, quote, space...).
+_ALLOWED := a b c d e f g h i j k l m n o p q r s t u v w x y z A B C D E F G H I J K L M N O P Q R S T U V W X Y Z 0 1 2 3 4 5 6 7 8 9 . _ -
+_strip = $(if $(2),$(call _strip,$(subst $(firstword $(2)),,$(1)),$(wordlist 2,$(words $(2)),$(2))),$(1))
+ifneq ($(words $(HANDLE)),1)
+$(error HANDLE must be exactly one word of letters, digits, dot, underscore or dash)
+endif
+ifneq ($(strip $(call _strip,$(HANDLE),$(_ALLOWED))),)
+$(error HANDLE may only contain letters, digits, dot, underscore and dash)
+endif
+
 UUID      := psi-monitor@$(HANDLE)
 VERSION   := $(shell sed -n 's/.*"version-name": *"\([^"]*\)".*/\1/p' metadata.json.in)
 

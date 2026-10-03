@@ -13,6 +13,8 @@ copied into the `.deb` changelog, which lintian wants under 80.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-03
+
 ### Added
 
 - Choose which badges to show: a "Show in top bar" list with a check mark per
@@ -23,11 +25,24 @@ copied into the `.deb` changelog, which lintian wants under 80.
   always be reached. "Select all" at the end of the list shows every badge
   again.
 - `nvidia-smi` only runs while the GPU badge is shown.
+- `SECURITY.md` with how to report a vulnerability and what the extension
+  does and does not do.
 
 ### Changed
 
 - The GPU badge stays hidden when `nvidia-smi` is not installed, instead of
   showing `GPU: n/a`.
+
+### Security
+
+- The shell runs `/usr/bin/nvidia-smi` when it exists, instead of whatever
+  the session `PATH` finds first. That `PATH` can list user-writable folders
+  such as `~/.local/bin` before `/usr/bin`.
+- The `Makefile` rejects a `HANDLE` with anything other than letters,
+  digits, dot, underscore and dash, before it can reach a shell command or
+  the `rm -rf` of `make uninstall`.
+- Dependabot waits 7 days before proposing a new version of an action or an
+  npm tool.
 
 ## [0.3.1] - 2026-10-03
 
@@ -92,7 +107,8 @@ copied into the `.deb` changelog, which lintian wants under 80.
   generated from `metadata.json.in`.
 - Released under GPL-3.0-or-later.
 
-[Unreleased]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pablomelo-inf/psi-monitor/compare/v0.1.0...v0.2.0
